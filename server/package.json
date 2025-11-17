@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "@fontsource/noto-sans-tc": "^5.2.8",
+    "bcryptjs": "^3.0.3",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "mongoose": "^8.19.4",

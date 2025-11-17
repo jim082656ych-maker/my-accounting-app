@@ -1,4 +1,4 @@
-// Force Update v2 - Add Auth Logic
+// client/src/App.js
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
 
@@ -10,10 +10,6 @@ import StatisticsChart from './StatisticsChart';
 
 // 引入匯出工具
 import * as XLSX from 'xlsx'; 
-
-// 【!! NEW !!】 引入剛剛建立的登入頁面元件
-// (請確保你已經建立了 AuthPage.js 檔案)
-import AuthPage from './AuthPage';
 
 // 分類定義
 const CATEGORIES = [
@@ -28,28 +24,22 @@ const CATEGORIES = [
 ];
 
 function App() {
-  // 【!! NEW !!】 新增一個狀態來判斷「是否已登入」
-  // 預設為 false (未登入)，所以一開始會看到登入畫面
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // --- 原本的記帳 App 狀態 ---
+  // --- 狀態 (State) ---
   const [records, setRecords] = useState([]);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(''); 
   const [category, setCategory] = useState('其他'); 
   const [error, setError] = useState(null);
 
-  // 正確的 Render API 網址 (保持不變)
+  // 【!! CRITICAL !!】 手機要能連線，必須用 Render 的網址 (不能用 localhost)
   const API_URL = 'https://my-accounting-app-ev44.onrender.com/api/records';
   const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
 
   // --- 效果 (Effect) ---
+  // 一載入網頁，直接抓取資料 (不需要登入)
   useEffect(() => {
-    // 只有在「已登入」的情況下，才去抓取資料
-    if (isLoggedIn) {
-      fetchRecords();
-    }
-  }, [isLoggedIn]); // 當登入狀態改變時執行
+    fetchRecords();
+  }, []); 
 
   // --- 功能函式 (Functions) ---
 
@@ -61,7 +51,7 @@ function App() {
       setRecords(response.data); 
     } catch (err) {
       console.error('抓取資料失敗:', err);
-      setError('無法載入資料，請稍後再試。');
+      setError('連線中... (Render 免費版喚醒需約 1 分鐘，請稍候)');
     }
   };
 
@@ -90,11 +80,7 @@ function App() {
       setCategory('其他'); 
     } catch (err) {
       console.error('新增資料失敗:', err.response ? err.response.data : err.message);
-      if (err.response && err.response.data && err.response.data.message) {
-        setError(`新增失敗：${err.response.data.message}`);
-      } else {
-        setError('新增失敗，請檢查輸入。');
-      }
+      setError('新增失敗，請檢查網路連線。');
     }
   };
 
@@ -150,36 +136,15 @@ function App() {
     }
   };
 
-  // --- 【!! NEW !!】 畫面渲染邏輯 ---
-
-  // 1. 如果還沒登入，顯示 AuthPage (登入/註冊頁)
-  if (!isLoggedIn) {
-    return (
-      <AuthPage 
-        onLoginSuccess={() => setIsLoggedIn(true)} 
-      />
-    );
-  }
-
-  // 2. 如果已登入，顯示原本的記帳 App
+  // --- 畫面 (JSX) ---
   return (
     <div className="App">
       <header className="app-header">
         <h1>我的全端記帳 App (含匯出)</h1>
-        
-        {/* 【!! NEW !!】 登出按鈕 */}
-        <button 
-          className="logout-btn" 
-          onClick={() => setIsLoggedIn(false)}
-          style={{ backgroundColor: '#dc3545', marginLeft: '10px' }}
-        >
-          登出
-        </button>
       </header>
 
       {error && <p className="error">{error}</p>}
 
-      {/* 以下是原本的表單、圖表、列表，完全不變 */}
       <form onSubmit={handleSubmit} className="record-form">
         <h3>新增一筆紀錄</h3>
         <div className="form-control">
@@ -203,68 +168,4 @@ function App() {
               <option key={cat.value} value={cat.value}>
                 {cat.label}
               </option>
-            ))}
-          </select>
-        </div>
-        <div className="form-control">
-          <label>金額：</label>
-          <input 
-            type="number"
-            step="any" 
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="支出請填負數 (例如：-150)"
-            required 
-          />
-        </div>
-        <button type="submit">新增紀錄</button>
-      </form>
-
-      <StatisticsChart records={records} />
-
-      <div className="export-container">
-        <h3>匯出報表</h3>
-        <button onClick={handleExportExcel} className="export-btn excel">
-          匯出 Excel (.xlsx)
-        </button>
-        <button onClick={handleExportPDF} className="export-btn pdf">
-          匯出 PDF (後端中文版)
-        </button>
-        <p className="export-note">
-          (PDF 由伺服器產生，支援完整中文內容)
-        </p>
-      </div>
-
-      <div className="records-list">
-        <h3>歷史紀錄</h3>
-        {records.length === 0 ? (
-          <p>目前沒有任何紀錄...</p>
-        ) : (
-          <ul>
-            {records.map(record => (
-              <li key={record._id} className={record.amount < 0 ? 'expense' : 'income'}>
-                <div className="record-details">
-                  <span className="record-category">
-                    {CATEGORIES.find(c => c.value === record.category)?.label.split(' ')[0] || '📎'}
-                  </span>
-                  <span>{record.description}</span>
-                </div>
-                <strong className={record.amount < 0 ? 'expense-text' : 'income-text'}>
-                  {record.amount.toLocaleString()} 元
-                </strong>
-                <button 
-                  className="delete-btn"
-                  onClick={() => handleDelete(record._id)}
-                >
-                  X
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-export default App;
+              

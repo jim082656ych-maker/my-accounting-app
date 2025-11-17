@@ -2,38 +2,38 @@
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
-const path = require('path'); // 用來處理檔案路徑
-const fs = require('fs');   // 用來讀取檔案
-const PDFDocument = require('pdfkit'); // PDF 引擎
+const path = require('path'); 
+const fs = require('fs');   
+const PDFDocument = require('pdfkit'); 
 
-// ---
-// 【!! 最終修正 !!】
-// 修正 fontPath，確保它指向 server/fonts/NotoSansTC-Regular.ttf
-// ---
-const fontPath = path.join(
-  __dirname, // 目前 /server 資料夾
-  'fonts',   // <-- 【!! 修正點 !!】 加上 'fonts' 資料夾
-  'NotoSansTC-Regular.ttf'
-);
+// 【!! NEW !!】 引入加密套件與 User 模型 (會員系統用)
+const bcrypt = require('bcryptjs');
+const User = require('./models/User'); 
 
-// 引入 Record 模型 (不變)
+// 引入 Record 模型 (記帳用)
 const Record = require('./models/Record'); 
 
-// 2. 建立 app (不變)
+// 設定字體路徑 (修正版)
+const fontPath = path.join(__dirname, 'fonts', 'NotoSansTC-Regular.ttf');
+
+// 2. 建立 app
 const app = express();
 
-// 3. 中介軟體 (不變)
+// 3. 中介軟體
 app.use(cors());
 app.use(express.json());
 
-// 4. 連接 MongoDB 資料庫 (不變)
+// 4. 連接 MongoDB 資料庫
 const MONGO_URI = "mongodb+srv://jim082656:jim19921205@cluster0.mucx6fo.mongodb.net/?appName=Cluster0";
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ 成功連接到 MongoDB Atlas！'))
   .catch(err => console.error('❌ 連接 MongoDB 失敗:', err));
 
-// 6. API 路由 (不變)
-// GET, POST, DELETE ... (這三段 API 路由完全不變)
+// ==========================================
+// 📝 記帳功能 API (Records)
+// ==========================================
+
+// GET: 讀取所有紀錄
 app.get('/api/records', async (req, res) => {
   try {
     const records = await Record.find().sort({ createdAt: -1 }); 
@@ -43,6 +43,7 @@ app.get('/api/records', async (req, res) => {
   }
 });
 
+// POST: 新增紀錄
 app.post('/api/records', async (req, res) => {
   try {
     const { description, amount, category } = req.body;
@@ -62,6 +63,7 @@ app.post('/api/records', async (req, res) => {
   }
 });
 
+// DELETE: 刪除紀錄
 app.delete('/api/records/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -78,16 +80,57 @@ app.delete('/api/records/:id', async (req, res) => {
   }
 });
 
-// 7. 建立「後端 PDF 匯出」 API (不變)
+// ==========================================
+// 🔐 會員系統 API (Auth) - 【!! NEW !!】
+// ==========================================
+
+// POST: 註冊 (Register)
+app.post('/api/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    // (1) 檢查欄位
+    if (!email || !password) {
+      return res.status(400).json({ message: '請輸入 Email 和密碼' });
+    }
+
+    // (2) 檢查 Email 是否已被註冊
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: '這個 Email 已經註冊過了' });
+    }
+
+    // (3) 密碼加密 (Hash)
+    const salt = await bcrypt.genSalt(10); // 產生鹽
+    const hashedPassword = await bcrypt.hash(password, salt); // 加密
+
+    // (4) 建立新使用者
+    const newUser = new User({
+      email: email,
+      password: hashedPassword
+    });
+
+    const savedUser = await newUser.save();
+
+    res.status(201).json({ 
+      message: '註冊成功！', 
+      user: { id: savedUser._id, email: savedUser.email } 
+    });
+
+  } catch (err) {
+    console.error('註冊失敗:', err);
+    res.status(500).json({ message: '伺服器錯誤', error: err.message });
+  }
+});
+
+// ==========================================
+// 🖨️ PDF 匯出 API
+// ==========================================
+
 app.post('/api/export-pdf', (req, res) => {
   try {
-    // 【!! 關鍵 !!】 檢查字體檔是否存在
-    // 這次 fontPath 絕對是正確的
     if (!fs.existsSync(fontPath)) {
-      // 如果還是找不到，我們給出最精確的錯誤
-      console.error('CRITICAL: 字體檔找不到!');
-      console.error('我正在這個路徑尋找:', fontPath);
-      console.error('請 100% 確保 NotoSansTC-Regular.ttf 檔案在 server/fonts 資料夾底下！'); // <--- 檢查這裡
+      console.error('CRITICAL: 字體檔找不到!', fontPath);
       return res.status(500).json({ message: '後端 PDF 產生失敗: 找不到字體檔' });
     }
 
@@ -98,12 +141,9 @@ app.post('/api/export-pdf', (req, res) => {
     res.setHeader('Content-Disposition', 'attachment; filename="MyRecords-CH.pdf"'); 
     doc.pipe(res);
 
-    doc.registerFont('NotoSansTC', fontPath); // <-- 這裡會讀取 .ttf
+    doc.registerFont('NotoSansTC', fontPath);
     
-    // --- 開始繪製 PDF 內容 ---
-    doc.font('NotoSansTC').fontSize(20).text('中文記帳報表', {
-      align: 'center'
-    });
+    doc.font('NotoSansTC').fontSize(20).text('中文記帳報表', { align: 'center' });
     doc.moveDown();
 
     // 表格標頭
@@ -118,7 +158,7 @@ app.post('/api/export-pdf', (req, res) => {
     doc.moveTo(50, tableTop + cellPadding + 5).lineTo(550, tableTop + cellPadding + 5).stroke();
     doc.y = tableTop + cellPadding + 10; 
 
-    // 繪製表格內容 (迴圈)
+    // 繪製表格內容
     records.forEach(record => {
       const y = doc.y;
       const date = new Date(record.createdAt).toLocaleDateString('zh-TW');
@@ -140,7 +180,6 @@ app.post('/api/export-pdf', (req, res) => {
     res.status(500).json({ message: '後端 PDF 產生失敗', error: err.message });
   }
 });
-
 
 // 8. 啟動伺服器
 const PORT = 5000;
