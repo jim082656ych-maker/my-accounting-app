@@ -1,0 +1,174 @@
+/* --- 這是新加的 CSS --- */
+
+/* 讓表單裡的 select 下拉選單跟 input 一樣寬 */
+.form-control select {
+  width: 100%;
+  padding: 10px;
+  font-size: 16px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  box-sizing: border-box; /* 確保 padding 不會撐爆寬度 */
+  background-color: #fff; /* 給個背景色 */
+}
+
+/* 列表項目的新排版 */
+.records-list li {
+  /* 舊的 display: flex; 還在, 很好 */
+  align-items: center; /* 垂直置中 */
+}
+
+.record-details {
+  display: flex;
+  align-items: center;
+  gap: 12px; /* 在 emoji 和描述之間加點空間 */
+  flex-grow: 1; /* 讓這塊區域佔滿左邊空間 */
+}
+
+.record-category {
+  font-size: 20px; /* 讓 emoji 大一點 */
+  width: 24px; /* 固定寬度 */
+  text-align: center;
+}
+
+/* 把金額推到最右邊 */
+.records-list li strong {
+  margin-left: auto; /* 關鍵 */
+  flex-shrink: 0; /* 確保金額不會縮小 */
+  padding-left: 15px; /* 跟描述有點空間 */
+}
+
+/* --- 這是新加的 CSS (for 刪除按鈕) --- */
+
+.delete-btn {
+  background-color: #e74c3c; /* 紅色 */
+  color: white;
+  border: none;
+  border-radius: 50%; /* 圓形 */
+  width: 24px;
+  height: 24px;
+  line-height: 24px; /* 讓 "X" 垂直置中 */
+  text-align: center;
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: 15px; /* 跟金額隔開 */
+  flex-shrink: 0; /* 確保按鈕不會被壓縮 */
+  transition: background-color 0.2s ease;
+}
+
+.delete-btn:hover {
+  background-color: #c0392b; /* 滑鼠移上去的深紅色 */
+}
+
+/* 把金額推到中間 */
+.records-list li strong {
+  margin-left: auto; 
+  flex-shrink: 0; 
+  padding-left: 15px;
+  /* 【!! 修正 !!】 移除 margin-right，因為按鈕會處理 */
+}
+
+
+/* --- 這是新加的 CSS (for 圖表) --- */
+
+.chart-container {
+  width: 100%;
+  max-width: 450px; /* 限制圓餅圖最大寬度 */
+  margin: 30px auto; /* 上下 30px, 左右自動 (置中) */
+  padding: 20px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.chart-container p {
+  text-align: center;
+  color: #777;
+  font-style: italic;
+}
+
+/* --- 這是新加的 CSS (for 圖表篩選選單) --- */
+
+.chart-filter {
+  display: flex;
+  /* 在手機上會自動換行 */
+  flex-wrap: wrap; 
+  justify-content: flex-end; /* 靠右對齊 */
+  align-items: center;
+  gap: 10px; /* 標籤和選單的間距 */
+  margin-bottom: 20px; /* 和圖表隔開 */
+}
+
+.chart-filter label {
+  font-weight: bold;
+  font-size: 14px;
+  /* 避免換行時跑版 */
+  white-space: nowrap; 
+}
+
+.chart-filter select {
+  padding: 8px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #fff;
+  /* 讓選單在手機上能自動縮放 */
+  flex-grow: 1; 
+}
+
+/* --- 這是新加的 CSS (for 匯出按鈕) --- */
+
+.export-container {
+  padding: 20px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  margin: 30px auto;
+  text-align: center;
+}
+
+.export-container h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+}
+
+.export-btn {
+  display: inline-block;
+  padding: 12px 20px;
+  font-size: 15px;
+  font-weight: bold;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  margin: 5px;
+}
+
+.export-btn:hover {
+  transform: translateY(-2px);
+}
+
+.export-btn.excel {
+  background-color: #1D6F42; /* Excel 綠色 */
+}
+.export-btn.excel:hover {
+  background-color: #165934;
+}
+
+.export-btn.pdf {
+  background-color: #D93025; /* PDF 紅色 */
+}
+.export-btn.pdf:hover {
+  background-color: #B0261D;
+}
+
+.export-note {
+  font-size: 12px;
+  color: #777;
+  margin-top: 15px;
+}
+
+/* --- 貼到這裡結束 --- */
+
+
+
+
