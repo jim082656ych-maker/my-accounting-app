@@ -1,4 +1,4 @@
-// Force Update v1
+// Force Update v2 - Add Auth Logic
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
 
@@ -10,6 +10,10 @@ import StatisticsChart from './StatisticsChart';
 
 // 引入匯出工具
 import * as XLSX from 'xlsx'; 
+
+// 【!! NEW !!】 引入剛剛建立的登入頁面元件
+// (請確保你已經建立了 AuthPage.js 檔案)
+import AuthPage from './AuthPage';
 
 // 分類定義
 const CATEGORIES = [
@@ -24,27 +28,32 @@ const CATEGORIES = [
 ];
 
 function App() {
-  // --- 狀態 (State) ---
+  // 【!! NEW !!】 新增一個狀態來判斷「是否已登入」
+  // 預設為 false (未登入)，所以一開始會看到登入畫面
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // --- 原本的記帳 App 狀態 ---
   const [records, setRecords] = useState([]);
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState(''); 
   const [category, setCategory] = useState('其他'); 
   const [error, setError] = useState(null);
 
-  // 【!! FIXED !!】 正確的 API 網址 (連線到 Render)
+  // 正確的 Render API 網址 (保持不變)
   const API_URL = 'https://my-accounting-app-ev44.onrender.com/api/records';
-  
-  // 【!! FIXED !!】 正確的 PDF 匯出網址 (連線到 Render)
   const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
 
   // --- 效果 (Effect) ---
   useEffect(() => {
-    fetchRecords();
-  }, []); 
+    // 只有在「已登入」的情況下，才去抓取資料
+    if (isLoggedIn) {
+      fetchRecords();
+    }
+  }, [isLoggedIn]); // 當登入狀態改變時執行
 
   // --- 功能函式 (Functions) ---
 
-  // A. 抓取所有資料 (GET)
+  // A. 抓取所有資料
   const fetchRecords = async () => {
     try {
       setError(null); 
@@ -56,7 +65,7 @@ function App() {
     }
   };
 
-  // B. 處理表單送出 (POST)
+  // B. 處理表單送出
   const handleSubmit = async (e) => {
     e.preventDefault(); 
     if (!description || !amount || !category) {
@@ -89,7 +98,7 @@ function App() {
     }
   };
 
-  // C. 處理「刪除」資料
+  // C. 處理刪除
   const handleDelete = async (idToDelete) => {
     if (!window.confirm('你確定要刪除這筆紀錄嗎？')) {
       return; 
@@ -120,40 +129,57 @@ function App() {
     XLSX.writeFile(wb, "MyRecords.xlsx");
   };
 
-  // E. 匯出 PDF (後端產生)
+  // E. 匯出 PDF
   const handleExportPDF = async () => {
     alert("後端 PDF 產生中... 請稍候");
-
     try {
       const response = await axios.post(
         PDF_EXPORT_URL, 
         { records: records }, 
         { responseType: 'blob' } 
       );
-
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const link = document.createElement('a');
       link.href = window.URL.createObjectURL(blob);
       link.download = 'MyRecords-CH.pdf';
       link.click(); 
       window.URL.revokeObjectURL(link.href);
-
     } catch (err) {
       console.error("後端 PDF 匯出失敗:", err);
       alert("PDF 產生失敗，請檢查 Console。");
     }
   };
 
-  // --- 畫面 (JSX) ---
+  // --- 【!! NEW !!】 畫面渲染邏輯 ---
+
+  // 1. 如果還沒登入，顯示 AuthPage (登入/註冊頁)
+  if (!isLoggedIn) {
+    return (
+      <AuthPage 
+        onLoginSuccess={() => setIsLoggedIn(true)} 
+      />
+    );
+  }
+
+  // 2. 如果已登入，顯示原本的記帳 App
   return (
     <div className="App">
-      <header>
+      <header className="app-header">
         <h1>我的全端記帳 App (含匯出)</h1>
+        
+        {/* 【!! NEW !!】 登出按鈕 */}
+        <button 
+          className="logout-btn" 
+          onClick={() => setIsLoggedIn(false)}
+          style={{ backgroundColor: '#dc3545', marginLeft: '10px' }}
+        >
+          登出
+        </button>
       </header>
 
       {error && <p className="error">{error}</p>}
 
-      {/* 1. 新增資料的表單 */}
+      {/* 以下是原本的表單、圖表、列表，完全不變 */}
       <form onSubmit={handleSubmit} className="record-form">
         <h3>新增一筆紀錄</h3>
         <div className="form-control">
@@ -194,10 +220,8 @@ function App() {
         <button type="submit">新增紀錄</button>
       </form>
 
-      {/* 2. 顯示「統計圖表」元件 */}
       <StatisticsChart records={records} />
 
-      {/* 3. 匯出按鈕區塊 */}
       <div className="export-container">
         <h3>匯出報表</h3>
         <button onClick={handleExportExcel} className="export-btn excel">
@@ -211,7 +235,6 @@ function App() {
         </p>
       </div>
 
-      {/* 4. 顯示所有資料的列表 */}
       <div className="records-list">
         <h3>歷史紀錄</h3>
         {records.length === 0 ? (
@@ -220,25 +243,21 @@ function App() {
           <ul>
             {records.map(record => (
               <li key={record._id} className={record.amount < 0 ? 'expense' : 'income'}>
-                
                 <div className="record-details">
                   <span className="record-category">
                     {CATEGORIES.find(c => c.value === record.category)?.label.split(' ')[0] || '📎'}
                   </span>
                   <span>{record.description}</span>
                 </div>
-                
                 <strong className={record.amount < 0 ? 'expense-text' : 'income-text'}>
                   {record.amount.toLocaleString()} 元
                 </strong>
-
                 <button 
                   className="delete-btn"
                   onClick={() => handleDelete(record._id)}
                 >
                   X
                 </button>
-
               </li>
             ))}
           </ul>
