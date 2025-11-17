@@ -1,5 +1,4 @@
-// client/src/App.js
-// 【Fix: Syntax Error】 修正語法錯誤的完整版本
+// Final Fix v2
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
 
@@ -37,6 +36,7 @@ function App() {
   const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
 
   // --- 效果 (Effect) ---
+  // 一載入網頁，直接抓取資料 (不需要登入)
   useEffect(() => {
     fetchRecords();
   }, []); 
