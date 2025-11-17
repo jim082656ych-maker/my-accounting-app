@@ -1,4 +1,5 @@
 // client/src/App.js
+// 【Fix: Syntax Error】 修正語法錯誤的完整版本
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
 
@@ -31,12 +32,11 @@ function App() {
   const [category, setCategory] = useState('其他'); 
   const [error, setError] = useState(null);
 
-  // 【!! CRITICAL !!】 手機要能連線，必須用 Render 的網址 (不能用 localhost)
+  // 【!! CRITICAL !!】 Render 網址 (手機連線用)
   const API_URL = 'https://my-accounting-app-ev44.onrender.com/api/records';
   const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
 
   // --- 效果 (Effect) ---
-  // 一載入網頁，直接抓取資料 (不需要登入)
   useEffect(() => {
     fetchRecords();
   }, []); 
@@ -168,4 +168,68 @@ function App() {
               <option key={cat.value} value={cat.value}>
                 {cat.label}
               </option>
-              
+            ))}
+          </select>
+        </div>
+        <div className="form-control">
+          <label>金額：</label>
+          <input 
+            type="number"
+            step="any" 
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            placeholder="支出請填負數 (例如：-150)"
+            required 
+          />
+        </div>
+        <button type="submit">新增紀錄</button>
+      </form>
+
+      <StatisticsChart records={records} />
+
+      <div className="export-container">
+        <h3>匯出報表</h3>
+        <button onClick={handleExportExcel} className="export-btn excel">
+          匯出 Excel (.xlsx)
+        </button>
+        <button onClick={handleExportPDF} className="export-btn pdf">
+          匯出 PDF (後端中文版)
+        </button>
+        <p className="export-note">
+          (PDF 由伺服器產生，支援完整中文內容)
+        </p>
+      </div>
+
+      <div className="records-list">
+        <h3>歷史紀錄</h3>
+        {records.length === 0 ? (
+          <p>目前沒有任何紀錄...</p>
+        ) : (
+          <ul>
+            {records.map(record => (
+              <li key={record._id} className={record.amount < 0 ? 'expense' : 'income'}>
+                <div className="record-details">
+                  <span className="record-category">
+                    {CATEGORIES.find(c => c.value === record.category)?.label.split(' ')[0] || '📎'}
+                  </span>
+                  <span>{record.description}</span>
+                </div>
+                <strong className={record.amount < 0 ? 'expense-text' : 'income-text'}>
+                  {record.amount.toLocaleString()} 元
+                </strong>
+                <button 
+                  className="delete-btn"
+                  onClick={() => handleDelete(record._id)}
+                >
+                  X
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default App;
