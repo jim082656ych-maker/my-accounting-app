@@ -1,4 +1,4 @@
-// 1. 引入 React 的功能 (useState, useEffect) 和 axios
+// Force Update v1
 import React, { useState, useEffect } from 'react';
 import axios from 'axios'; 
 
@@ -31,10 +31,10 @@ function App() {
   const [category, setCategory] = useState('其他'); 
   const [error, setError] = useState(null);
 
-  // 【!! FIXED !!】 正確的 API 網址 (確認無誤)
+  // 【!! FIXED !!】 正確的 API 網址 (連線到 Render)
   const API_URL = 'https://my-accounting-app-ev44.onrender.com/api/records';
   
-  // 【!! FIXED !!】 正確的 PDF 匯出網址 (確認無誤)
+  // 【!! FIXED !!】 正確的 PDF 匯出網址 (連線到 Render)
   const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
 
   // --- 效果 (Effect) ---
