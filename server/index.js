@@ -1,39 +1,52 @@
-// 1. 抓取 HTML 上的元素
-const descInput = document.getElementById('desc');     // 項目輸入框
-const amountInput = document.getElementById('amount'); // 金額輸入框
-const addBtn = document.getElementById('addBtn');      // 按鈕
-const list = document.getElementById('list');          // 清單區域
+const express = require('express');
+const cors = require('cors');
+// const mongoose = require('mongoose'); // 註解掉或刪掉：暫時不用資料庫
+const app = express();
 
-// 2. 監聽按鈕的「點擊」事件
-addBtn.addEventListener('click', function() {
+app.use(cors());
+app.use(express.json());
+
+// --- 模擬資料庫 (假資料) ---
+// 因為沒有 MongoDB，我們用一個變數來存資料
+let records = [
+    { id: 1, item: "早餐 (測試資料)", cost: 50, date: "2023-01-01" },
+    { id: 2, item: "午餐 (測試資料)", cost: 120, date: "2023-01-01" }
+];
+
+// --- API 區域 ---
+
+// 1. 取得所有記帳紀錄 (GET)
+app.get('/api/records', (req, res) => {
+    console.log('前端來要在列表了...');
+    res.json(records); // 直接回傳變數裡的資料
+});
+
+// 2. 新增一筆紀錄 (POST)
+app.post('/api/records', (req, res) => {
+    const newRecord = req.body;
     
-    // 取得輸入的值
-    const desc = descInput.value;
-    const amount = amountInput.value;
-
-    // 簡單的檢查：如果沒填寫，就跳出警告
-    if (desc === '' || amount === '') {
-        alert('請輸入項目和金額喔！');
-        return;
-    }
-
-    // 3. 製作新的清單項目 (HTML)
-    // 我們要動態產生像這樣的 HTML: 
-    // <li class="item"><span>午餐</span><span>$100</span></li>
+    // 幫它加一個隨機 ID (因為沒有資料庫幫我們產生 ID)
+    newRecord.id = Date.now(); 
     
-    const newItem = document.createElement('li'); // 建立 li
-    newItem.classList.add('item');                // 加上 CSS class 讓它變漂亮
+    console.log('收到新記帳:', newRecord);
+    
+    // 存入我們的變數陣列
+    records.push(newRecord);
+    
+    res.status(201).json(newRecord);
+});
 
-    // 設定裡面的內容 (使用樣板字串 Template Literals)
-    newItem.innerHTML = `
-        <span>${desc}</span>
-        <span>$${amount}</span>
-    `;
+// 3. 刪除紀錄 (DELETE) - 額外加碼教你
+app.delete('/api/records/:id', (req, res) => {
+    const id = parseInt(req.params.id);
+    // 過濾掉該 ID 的資料 (等於刪除)
+    records = records.filter(record => record.id !== id);
+    res.json({ message: "刪除成功" });
+});
 
-    // 4. 把新項目加入清單
-    list.appendChild(newItem);
-
-    // 5. 清空輸入框，方便輸入下一筆
-    descInput.value = '';
-    amountInput.value = '';
+// --- 啟動伺服器 ---
+const PORT = 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 簡易版伺服器啟動！在 Port ${PORT}`);
+    console.log(`⚠️ 注意：這是無資料庫模式，重啟伺服器後資料會重置`);
 });
