@@ -1,235 +1,194 @@
-// Final Fix v3 - Force Update
-// Final Fix v2
 import React, { useState, useEffect } from 'react';
-import axios from 'axios'; 
-
-// 引入基本的 CSS 樣式
-import './App.css'; 
-
-// 引入圖表元件
+// 1. 引入 Chakra UI 的所有漂亮組件
+import { 
+  Box, 
+  Button, 
+  Container, 
+  Heading, 
+  Input, 
+  VStack, 
+  HStack, 
+  Text, 
+  useToast,
+  Card,
+  CardBody,
+  Stat,
+  StatLabel,
+  StatNumber,
+  Badge,
+  IconButton
+} from '@chakra-ui/react';
+// 2. 引入圖示
+import { DeleteIcon, AddIcon } from '@chakra-ui/icons';
+// 3. 引入我們剛剛做好的圓餅圖組件
 import StatisticsChart from './StatisticsChart';
 
-// 引入匯出工具
-import * as XLSX from 'xlsx'; 
-
-// 分類定義
-const CATEGORIES = [
-  { value: '食物', label: '🍔 食物' },
-  { value: '交通', label: '🚌 交通' },
-  { value: '娛樂', label: '🎬 娛樂' },
-  { value: '治裝', label: '👕 治裝' }, 
-  { value: '教育', label: '📚 教育' }, 
-  { value: '投資', label: '📈 投資' },
-  { value: '收入', label: '💰 收入' },
-  { value: '其他', label: '📎 其他' },
-];
-
 function App() {
-  // --- 狀態 (State) ---
-  const [records, setRecords] = useState([]);
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState(''); 
-  const [category, setCategory] = useState('其他'); 
-  const [error, setError] = useState(null);
+  // --- 狀態變數 ---
+  const [records, setRecords] = useState([]); // 記帳列表
+  const [item, setItem] = useState('');       // 輸入的項目
+  const [cost, setCost] = useState('');       // 輸入的金額
+  const toast = useToast();                   // 提示訊息
 
-  // 【!! CRITICAL !!】 Render 網址 (手機連線用)
-  const API_URL = 'https://my-accounting-app-ev44.onrender.com/api/records';
-  const PDF_EXPORT_URL = 'https://my-accounting-app-ev44.onrender.com/api/export-pdf';
-
-  // --- 效果 (Effect) ---
-  // 一載入網頁，直接抓取資料 (不需要登入)
-  useEffect(() => {
-    fetchRecords();
-  }, []); 
-
-  // --- 功能函式 (Functions) ---
-
-  // A. 抓取所有資料
+  // --- API 1: 讀取資料 ---
   const fetchRecords = async () => {
     try {
-      setError(null); 
-      const response = await axios.get(API_URL);
-      setRecords(response.data); 
+      const res = await fetch('http://localhost:5000/api/records');
+      const data = await res.json();
+      setRecords(data);
     } catch (err) {
-      console.error('抓取資料失敗:', err);
-      setError('連線中... (Render 免費版喚醒需約 1 分鐘，請稍候)');
+      console.error("連線錯誤:", err);
+      // 如果後端沒開，這裡會報錯，但不影響畫面顯示
     }
   };
 
-  // B. 處理表單送出
-  const handleSubmit = async (e) => {
-    e.preventDefault(); 
-    if (!description || !amount || !category) {
-      alert('請填寫所有欄位！');
-      return;
+  // 畫面載入時，自動抓一次資料
+  useEffect(() => {
+    fetchRecords();
+  }, []);
+
+  // --- API 2: 新增資料 ---
+  const handleSubmit = async () => {
+    // 檢查有沒有輸入
+    if(!item || !cost) {
+        toast({ title: "請輸入項目和金額", status: "warning", duration: 2000 });
+        return;
     }
-    const numAmount = parseFloat(amount);
-    if (isNaN(numAmount)) {
-      alert('請輸入有效的金額！');
-      return;
-    }
+
+    const newRecord = { item, cost: parseInt(cost) };
+    
     try {
-      setError(null); 
-      const response = await axios.post(API_URL, {
-        description: description,
-        amount: numAmount, 
-        category: category  
+      await fetch('http://localhost:5000/api/records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRecord),
       });
-      setRecords([response.data, ...records]);
-      setDescription('');
-      setAmount('');
-      setCategory('其他'); 
+      // 清空輸入框
+      setItem('');
+      setCost('');
+      // 重新整理列表
+      fetchRecords(); 
+      toast({ title: "記帳成功！", status: "success", duration: 2000 });
     } catch (err) {
-      console.error('新增資料失敗:', err.response ? err.response.data : err.message);
-      setError('新增失敗，請檢查網路連線。');
+      console.error(err);
+      toast({ title: "新增失敗", status: "error" });
     }
   };
 
-  // C. 處理刪除
-  const handleDelete = async (idToDelete) => {
-    if (!window.confirm('你確定要刪除這筆紀錄嗎？')) {
-      return; 
-    }
-    try {
-      setError(null);
-      await axios.delete(`${API_URL}/${idToDelete}`);
-      setRecords(prevRecords => 
-        prevRecords.filter(record => record._id !== idToDelete)
-      );
-    } catch (err) {
-      console.error('刪除資料失敗:', err);
-      setError('刪除失敗，請稍後再試。');
-    }
-  };
+  // --- API 3: 刪除資料 ---
+  const handleDelete = async (id) => {
+      try {
+        await fetch(`http://localhost:5000/api/records/${id}`, { method: 'DELETE' });
+        fetchRecords(); // 重新抓取
+        toast({ title: "已刪除", status: "info", duration: 1000 });
+      } catch (err) {
+          console.error(err);
+      }
+  }
 
-  // D. 匯出 Excel
-  const handleExportExcel = () => {
-    const dataToExport = records.map(record => ({
-      '日期': new Date(record.createdAt).toLocaleDateString('zh-TW', { year: 'numeric', month: '2-digit', day: '2-digit' }),
-      '分類': record.category,
-      '描述': record.description,
-      '金額': record.amount
-    }));
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.json_to_sheet(dataToExport);
-    XLSX.utils.book_append_sheet(wb, ws, "Records");
-    XLSX.writeFile(wb, "MyRecords.xlsx");
-  };
+  // 計算總金額
+  const total = records.reduce((acc, curr) => acc + curr.cost, 0);
 
-  // E. 匯出 PDF
-  const handleExportPDF = async () => {
-    alert("後端 PDF 產生中... 請稍候");
-    try {
-      const response = await axios.post(
-        PDF_EXPORT_URL, 
-        { records: records }, 
-        { responseType: 'blob' } 
-      );
-      const blob = new Blob([response.data], { type: 'application/pdf' });
-      const link = document.createElement('a');
-      link.href = window.URL.createObjectURL(blob);
-      link.download = 'MyRecords-CH.pdf';
-      link.click(); 
-      window.URL.revokeObjectURL(link.href);
-    } catch (err) {
-      console.error("後端 PDF 匯出失敗:", err);
-      alert("PDF 產生失敗，請檢查 Console。");
-    }
-  };
-
-  // --- 畫面 (JSX) ---
+  // --- 畫面渲染區 ---
   return (
-    <div className="App">
-      <header className="app-header">
-        <h1>我的全端記帳 App (含匯出)</h1>
-      </header>
+    // 最外層背景
+    <Box bg="gray.50" minH="100vh" py={8}>
+      <Container maxW="md"> {/* 限制寬度，模擬手機介面 */}
+        
+        {/* 區塊 1：標題與總金額 */}
+        <VStack spacing={4} mb={6}>
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒</Heading>
+          
+          <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
+              <CardBody textAlign="center">
+                  <Stat>
+                      <StatLabel fontSize="lg" color="gray.500">本月總支出</StatLabel>
+                      <StatNumber fontSize="4xl" color="red.500" fontWeight="bold">
+                        ${total}
+                      </StatNumber>
+                  </Stat>
+              </CardBody>
+          </Card>
+        </VStack>
 
-      {error && <p className="error">{error}</p>}
+        {/* 區塊 2：圓餅圖 (把資料傳進去) */}
+        <StatisticsChart data={records} />
 
-      <form onSubmit={handleSubmit} className="record-form">
-        <h3>新增一筆紀錄</h3>
-        <div className="form-control">
-          <label>描述：</label>
-          <input 
-            type="text" 
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="例如：晚餐"
-            required 
-          />
-        </div>
-        <div className="form-control">
-          <label>分類：</label>
-          <select 
-            value={category} 
-            onChange={(e) => setCategory(e.target.value)}
-            required
-          >
-            {CATEGORIES.map(cat => (
-              <option key={cat.value} value={cat.value}>
-                {cat.label}
-              </option>
+        {/* 區塊 3：輸入框 */}
+        <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
+            <CardBody>
+                <VStack spacing={3}>
+                    <Input 
+                        placeholder="消費項目 (例如: 珍珠奶茶)" 
+                        value={item} 
+                        onChange={(e) => setItem(e.target.value)} 
+                        size="lg"
+                        variant="filled"
+                    />
+                    <Input 
+                        placeholder="金額" 
+                        type="number" 
+                        value={cost} 
+                        onChange={(e) => setCost(e.target.value)} 
+                        size="lg"
+                        variant="filled"
+                    />
+                    <Button 
+                        colorScheme="teal" 
+                        size="lg" 
+                        w="100%" 
+                        onClick={handleSubmit}
+                        leftIcon={<AddIcon />}
+                        mt={2}
+                    >
+                        新增一筆
+                    </Button>
+                </VStack>
+            </CardBody>
+        </Card>
+
+        {/* 區塊 4：列表清單 */}
+        <VStack w="100%" spacing={3} align="stretch">
+            <Text fontSize="sm" color="gray.500" ml={1}>近期消費紀錄</Text>
+            
+            {records.map((record) => (
+                <Card key={record.id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden">
+                    <CardBody py={3} px={4}>
+                        <HStack justify="space-between">
+                            <VStack align="start" spacing={0}>
+                                <Text fontWeight="bold" fontSize="md" color="gray.700">
+                                  {record.item}
+                                </Text>
+                                <Text fontSize="xs" color="gray.400">
+                                  {new Date().toLocaleDateString()}
+                                </Text>
+                            </VStack>
+                            
+                            <HStack>
+                                <Badge colorScheme="orange" fontSize="0.9em" borderRadius="md" px={2} py={1}>
+                                  ${record.cost}
+                                </Badge>
+                                <IconButton 
+                                    aria-label="刪除"
+                                    icon={<DeleteIcon />}
+                                    size="sm" 
+                                    colorScheme="red" 
+                                    variant="ghost" 
+                                    onClick={() => handleDelete(record.id)}
+                                />
+                            </HStack>
+                        </HStack>
+                    </CardBody>
+                </Card>
             ))}
-          </select>
-        </div>
-        <div className="form-control">
-          <label>金額：</label>
-          <input 
-            type="number"
-            step="any" 
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="支出請填負數 (例如：-150)"
-            required 
-          />
-        </div>
-        <button type="submit">新增紀錄</button>
-      </form>
+            
+            {records.length === 0 && (
+              <Text textAlign="center" color="gray.400" mt={4}>目前沒有紀錄，快去記帳吧！</Text>
+            )}
+        </VStack>
 
-      <StatisticsChart records={records} />
-
-      <div className="export-container">
-        <h3>匯出報表</h3>
-        <button onClick={handleExportExcel} className="export-btn excel">
-          匯出 Excel (.xlsx)
-        </button>
-        <button onClick={handleExportPDF} className="export-btn pdf">
-          匯出 PDF (後端中文版)
-        </button>
-        <p className="export-note">
-          (PDF 由伺服器產生，支援完整中文內容)
-        </p>
-      </div>
-
-      <div className="records-list">
-        <h3>歷史紀錄</h3>
-        {records.length === 0 ? (
-          <p>目前沒有任何紀錄...</p>
-        ) : (
-          <ul>
-            {records.map(record => (
-              <li key={record._id} className={record.amount < 0 ? 'expense' : 'income'}>
-                <div className="record-details">
-                  <span className="record-category">
-                    {CATEGORIES.find(c => c.value === record.category)?.label.split(' ')[0] || '📎'}
-                  </span>
-                  <span>{record.description}</span>
-                </div>
-                <strong className={record.amount < 0 ? 'expense-text' : 'income-text'}>
-                  {record.amount.toLocaleString()} 元
-                </strong>
-                <button 
-                  className="delete-btn"
-                  onClick={() => handleDelete(record._id)}
-                >
-                  X
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
+      </Container>
+    </Box>
   );
 }
 
