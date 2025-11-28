@@ -32,10 +32,11 @@ function App() {
   const [rates, setRates] = useState({});
   const toast = useToast();
 
-  // --- 1. 抓取後端資料 ---
+  // --- 1. 抓取後端資料 (已更新為 Render 雲端網址) ---
   const fetchRecords = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/records');
+      // ✨ 這裡改成你的 Render 網址
+      const res = await fetch('https://my-accounting-app-1.onrender.com/api/records');
       const data = await res.json();
       setRecords(data);
     } catch (err) { console.error("連線錯誤:", err); }
@@ -44,15 +45,13 @@ function App() {
   // --- 2. 抓取即時匯率 (自動換算成台幣計價) ---
   const fetchRates = async () => {
     try {
-      // 原始資料是以 USD 為基準
       const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
       const data = await res.json();
       
-      const usdToTwd = data.rates.TWD; // 1 美金 = 幾台幣
+      const usdToTwd = data.rates.TWD; 
 
       setRates({
         USD: usdToTwd, 
-        // 換算公式: (1 美金換多少台幣) / (1 美金換多少日幣) = 1 日幣換多少台幣
         JPY: usdToTwd / data.rates.JPY, 
         EUR: usdToTwd / data.rates.EUR, 
         CNY: usdToTwd / data.rates.CNY  
@@ -127,7 +126,7 @@ function App() {
     });
   };
 
-  // --- 功能：新增記帳 ---
+  // --- 功能：新增記帳 (已更新為 Render 雲端網址) ---
   const handleSubmit = async () => {
     if(!item || !cost || !category || !date) {
         toast({ title: "請填寫完整", status: "warning" });
@@ -144,26 +143,27 @@ function App() {
     };
     
     try {
-      await fetch('http://localhost:5000/api/records', {
+      // ✨ 這裡改成你的 Render 網址
+      await fetch('https://my-accounting-app-1.onrender.com/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord),
       });
       setItem(''); setCost(''); setCategory(''); setMobileBarcode('');
-      // 重置日期為今天
       setDate(new Date().toISOString().split('T')[0]);
       
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "新增失敗", description: "請確認後端開啟", status: "error" });
+      toast({ title: "新增失敗", description: "請確認網路連線", status: "error" });
     }
   };
 
-  // --- 功能：刪除記帳 ---
+  // --- 功能：刪除記帳 (已更新為 Render 雲端網址) ---
   const handleDelete = async (id) => {
       try {
-        await fetch(`http://localhost:5000/api/records/${id}`, { method: 'DELETE' });
+        // ✨ 這裡改成你的 Render 網址
+        await fetch(`https://my-accounting-app-1.onrender.com/api/records/${id}`, { method: 'DELETE' });
         fetchRecords();
         toast({ title: "刪除成功", status: "info", duration: 1000 });
       } catch (err) { console.error(err); }
@@ -198,7 +198,7 @@ function App() {
           </Card>
         </VStack>
 
-        {/* 匯率看板 (台幣計價) */}
+        {/* 匯率看板 */}
         <Card w="100%" mb={6} bg="blue.50" borderLeft="4px solid" borderColor="blue.400" boxShadow="sm">
             <CardBody py={3}>
             <Text fontSize="sm" fontWeight="bold" color="blue.600" mb={3}>🌍 即時匯率 (台幣計價)</Text>
