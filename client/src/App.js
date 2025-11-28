@@ -11,28 +11,22 @@ import StatisticsChart from './StatisticsChart';
 // --- 匯出套件 ---
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import autoTable from 'jspdf-autotable'; // 用來畫表格
 
-// --- 分類選項 ---
 const EXPENSE_CATS = ["飲食", "交通", "水電", "教育", "投資", "房租", "美裝與服飾", "通訊", "休閒", "其他"]; 
 const INCOME_CATS = ["薪水", "兼職", "投資", "零用錢", "其他"];
 
 function App() {
-  // --- 狀態管理 ---
   const [records, setRecords] = useState([]);
   const [item, setItem] = useState('');
   const [cost, setCost] = useState('');
   const [category, setCategory] = useState('');
-  const [type, setType] = useState('expense'); // 預設為支出
-  
-  // 日期與載具
+  const [type, setType] = useState('expense'); 
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [mobileBarcode, setMobileBarcode] = useState('');
-
   const [rates, setRates] = useState({});
   const toast = useToast();
 
-  // --- 1. 抓取後端資料 (使用 Render 雲端網址) ---
   const fetchRecords = async () => {
     try {
       const res = await fetch('https://my-accounting-app-1.onrender.com/api/records');
@@ -41,41 +35,33 @@ function App() {
     } catch (err) { console.error("連線錯誤:", err); }
   };
 
-  // --- 2. 抓取即時匯率 ---
   const fetchRates = async () => {
     try {
       const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
       const data = await res.json();
-      
       const usdToTwd = data.rates.TWD; 
-
       setRates({
         USD: usdToTwd, 
         JPY: usdToTwd / data.rates.JPY, 
         EUR: usdToTwd / data.rates.EUR, 
         CNY: usdToTwd / data.rates.CNY  
       });
-    } catch (err) { console.error("匯率抓取失敗", err); }
+    } catch (err) { console.error(err); }
   };
 
-  // 初始化
   useEffect(() => {
     fetchRecords();
     fetchRates();
   }, []);
 
-  // --- 功能：剪貼簿貼上載具 ---
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
       setMobileBarcode(text);
       toast({ title: "已貼上", status: "success", duration: 1000 });
-    } catch (err) {
-      toast({ title: "貼上失敗", status: "error" });
-    }
+    } catch (err) { toast({ title: "貼上失敗", status: "error" }); }
   };
 
-  // --- 功能：匯出 Excel ---
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
       日期: new Date(r.date).toLocaleDateString(),
@@ -91,56 +77,81 @@ function App() {
     toast({ title: "Excel 下載成功", status: "success" });
   };
 
-  // --- 功能：匯出 PDF (截圖法) ---
-  const exportToPDF = () => {
-    const input = document.getElementById('record-list'); 
-    
-    if (!input) {
-      toast({ title: "找不到資料區域", status: "error" });
-      return;
+  // --- ✨ 終極版 PDF 匯出 (文字模式 + 內嵌中文字型) ---
+  const exportToPDF = async () => {
+    try {
+      toast({ title: "正在產生報表...", description: "下載字型檔中，手機請稍候", status: "info", duration: 3000 });
+
+      // 1. 從 public 資料夾讀取字型檔
+      const response = await fetch('/NotoSansTC-Regular.ttf');
+      
+      if (!response.ok) {
+        throw new Error("找不到字型檔 (client/public/NotoSansTC-Regular.ttf)");
+      }
+      
+      // 2. 轉成 Blob -> Base64
+      const fontBlob = await response.blob();
+      const reader = new FileReader();
+      reader.readAsDataURL(fontBlob);
+      
+      reader.onloadend = () => {
+        // 取得 Base64 字串 (去掉前面的 data: font/ttf;base64, ...)
+        const base64Font = reader.result.split(',')[1]; 
+        
+        const doc = new jsPDF();
+        
+        // 3. 將字型註冊到 PDF 引擎
+        doc.addFileToVFS("MyFont.ttf", base64Font);
+        doc.addFont("MyFont.ttf", "MyFont", "normal");
+        doc.setFont("MyFont"); // 設定全域使用這個字型
+
+        // 4. 寫入標題
+        doc.setFontSize(18);
+        doc.text("我的記帳本報表", 14, 15);
+        
+        doc.setFontSize(10);
+        doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 14, 22);
+
+        // 5. 準備表格資料
+        const tableColumn = ["日期", "項目", "類型", "分類", "金額", "載具"];
+        const tableRows = records.map(record => [
+          new Date(record.date).toLocaleDateString(),
+          record.item,
+          record.type === 'income' ? '收入' : '支出',
+          record.category,
+          `$${record.cost}`,
+          record.mobileBarcode || '-'
+        ]);
+
+        // 6. 產生表格 (使用 autoTable)
+        autoTable(doc, {
+          head: [tableColumn],
+          body: tableRows,
+          startY: 25,
+          styles: { 
+            font: "MyFont", // ✨ 關鍵：指定表格內容也要用這個中文字型
+            fontStyle: "normal" 
+          },
+          headStyles: { fillColor: [49, 151, 149] }, // 表頭顏色 (Teal)
+        });
+
+        // 7. 下載
+        doc.save("我的記帳本_正式版.pdf");
+        toast({ title: "PDF 下載成功", status: "success" });
+      };
+
+    } catch (err) {
+      console.error(err);
+      toast({ title: "PDF 製作失敗", description: "字型載入錯誤，請檢查 public 資料夾", status: "error" });
     }
-
-    toast({ title: "正在製作 PDF...", status: "info", duration: 1000 });
-
-    html2canvas(input, { 
-      scale: 2, 
-      // ✨ 關鍵魔法：這裡設定凡是有 'pdf-hide' 的東西，拍照時通通略過
-      ignoreElements: (element) => element.classList.contains('pdf-hide')
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
-      
-      pdf.text("My Accounting App (Recent 50)", 14, 10); 
-      pdf.addImage(imgData, 'PNG', 0, 20, pdfWidth, pdfHeight); 
-      pdf.save("我的記帳本_Snapshot.pdf");
-      
-      toast({ title: "PDF 下載成功", status: "success" });
-    }).catch(err => {
-        console.error(err);
-        toast({ title: "PDF 製作失敗", status: "error" });
-    });
   };
 
-  // --- 功能：新增記帳 ---
   const handleSubmit = async () => {
     if(!item || !cost || !category || !date) {
         toast({ title: "請填寫完整", status: "warning" });
         return;
     }
-    
-    const newRecord = { 
-      item, 
-      cost: parseInt(cost), 
-      category, 
-      type, 
-      date: new Date(date),
-      mobileBarcode
-    };
-    
+    const newRecord = { item, cost: parseInt(cost), category, type, date: new Date(date), mobileBarcode };
     try {
       await fetch('https://my-accounting-app-1.onrender.com/api/records', {
         method: 'POST',
@@ -149,15 +160,13 @@ function App() {
       });
       setItem(''); setCost(''); setCategory(''); setMobileBarcode('');
       setDate(new Date().toISOString().split('T')[0]);
-      
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "新增失敗", description: "請確認網路連線", status: "error" });
+      toast({ title: "新增失敗", status: "error" });
     }
   };
 
-  // --- 功能：刪除記帳 ---
   const handleDelete = async (id) => {
       try {
         await fetch(`https://my-accounting-app-1.onrender.com/api/records/${id}`, { method: 'DELETE' });
@@ -166,7 +175,6 @@ function App() {
       } catch (err) { console.error(err); }
   }
 
-  // 計算淨資產
   const totalBalance = records.reduce((acc, curr) => {
     if (curr.type === 'income') return acc + curr.cost;
     return acc - curr.cost; 
@@ -176,7 +184,6 @@ function App() {
     <Box bg="gray.50" minH="100vh" py={8}>
       <Container maxW="md">
         
-        {/* 標題與總金額 */}
         <VStack spacing={4} mb={6}>
           <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒</Heading>
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
@@ -195,35 +202,20 @@ function App() {
           </Card>
         </VStack>
 
-        {/* 匯率看板 */}
         <Card w="100%" mb={6} bg="blue.50" borderLeft="4px solid" borderColor="blue.400" boxShadow="sm">
             <CardBody py={3}>
             <Text fontSize="sm" fontWeight="bold" color="blue.600" mb={3}>🌍 即時匯率 (台幣計價)</Text>
             <SimpleGrid columns={4} spacing={2} textAlign="center">
-              <Box>
-                <Text fontSize="xs" color="gray.500">🇺🇸 美金</Text>
-                <Text fontWeight="bold">{rates.USD?.toFixed(2)}</Text>
-              </Box>
-              <Box>
-                <Text fontSize="xs" color="gray.500">🇯🇵 日圓</Text>
-                <Text fontWeight="bold">{rates.JPY?.toFixed(3)}</Text>
-              </Box>
-              <Box>
-                <Text fontSize="xs" color="gray.500">🇪🇺 歐元</Text>
-                <Text fontWeight="bold">{rates.EUR?.toFixed(2)}</Text>
-              </Box>
-              <Box>
-                <Text fontSize="xs" color="gray.500">🇨🇳 人民幣</Text>
-                <Text fontWeight="bold">{rates.CNY?.toFixed(2)}</Text>
-              </Box>
+              <Box><Text fontSize="xs">🇺🇸 美金</Text><Text fontWeight="bold">{rates.USD?.toFixed(2)}</Text></Box>
+              <Box><Text fontSize="xs">🇯🇵 日圓</Text><Text fontWeight="bold">{rates.JPY?.toFixed(3)}</Text></Box>
+              <Box><Text fontSize="xs">🇪🇺 歐元</Text><Text fontWeight="bold">{rates.EUR?.toFixed(2)}</Text></Box>
+              <Box><Text fontSize="xs">🇨🇳 人民幣</Text><Text fontWeight="bold">{rates.CNY?.toFixed(2)}</Text></Box>
             </SimpleGrid>
           </CardBody>
         </Card>
 
-        {/* 圖表組件 */}
         <StatisticsChart data={records} currentType={type} />
 
-        {/* 輸入區塊 */}
         <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
             <CardBody>
                 <VStack spacing={4}>
@@ -234,54 +226,28 @@ function App() {
                       </Stack>
                     </RadioGroup>
                     <Divider />
-                    
-                    {/* 日期 */}
                     <FormControl>
                         <FormLabel fontSize="sm" color="gray.500">日期</FormLabel>
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
                     </FormControl>
-
-                    {/* 載具號碼 */}
                     <FormControl>
                         <FormLabel fontSize="sm" color="gray.500">載具號碼 (可選)</FormLabel>
                         <InputGroup>
-                            <Input 
-                                placeholder="/ABC.123" 
-                                value={mobileBarcode} 
-                                onChange={(e) => setMobileBarcode(e.target.value)} 
-                                variant="filled"
-                            />
-                            <InputRightElement width="4.5rem">
-                                <Button h="1.75rem" size="sm" onClick={handlePaste}>
-                                    貼上
-                                </Button>
-                            </InputRightElement>
+                            <Input placeholder="/ABC.123" value={mobileBarcode} onChange={(e) => setMobileBarcode(e.target.value)} variant="filled" />
+                            <InputRightElement width="4.5rem"><Button h="1.75rem" size="sm" onClick={handlePaste}>貼上</Button></InputRightElement>
                         </InputGroup>
                     </FormControl>
-
                     <Input placeholder="項目 (ex: 午餐)" value={item} onChange={(e) => setItem(e.target.value)} variant="filled"/>
-                    
                     <Select placeholder="請選擇分類" value={category} onChange={(e) => setCategory(e.target.value)} variant="filled">
-                        {(type === 'expense' ? EXPENSE_CATS : INCOME_CATS).map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
+                        {(type === 'expense' ? EXPENSE_CATS : INCOME_CATS).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
                     </Select>
-                    
                     <Input placeholder="金額" type="number" value={cost} onChange={(e) => setCost(e.target.value)} variant="filled"/>
-                    
                     <Button colorScheme={type === 'expense' ? "red" : "green"} w="100%" onClick={handleSubmit} leftIcon={<AddIcon />}>
                         {type === 'expense' ? "新增支出" : "新增收入"}
                     </Button>
                 </VStack>
             </CardBody>
         </Card>
-
-        {/* 列表區塊 */}
-        <VStack spacing={2} align="stretch" mb={2}>
-            <Text fontSize="sm" color="gray.500" textAlign="center">
-                僅顯示最近 50 筆紀錄 (共 {records.length} 筆)
-            </Text>
-        </VStack>
 
         <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
             {records.slice(0, 50).map((record) => (
@@ -291,22 +257,9 @@ function App() {
                             <VStack align="start" spacing={0}>
                                 <Text fontWeight="bold">{record.item}</Text>
                                 <HStack>
-                                  {/* ✨ pdf-hide: 截圖時隱藏收支、分類 */}
-                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
-                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
-                                  
-                                  {/* ✨✨✨ 關鍵修改：把載具也加上 pdf-hide 和 data-html2canvas-ignore 屬性，讓它在 PDF 中隱形 ✨✨✨ */}
-                                  {record.mobileBarcode && (
-                                      <Badge 
-                                        className="pdf-hide" 
-                                        data-html2canvas-ignore="true" 
-                                        colorScheme="gray" 
-                                        variant="solid" 
-                                        mt={1}
-                                      >
-                                        📱 {record.mobileBarcode}
-                                      </Badge>
-                                  )}
+                                  <Badge colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
+                                  <Badge colorScheme="purple" variant="outline">{record.category}</Badge>
+                                  {record.mobileBarcode && (<Badge colorScheme="gray" variant="solid">📱 {record.mobileBarcode}</Badge>)}
                                 </HStack>
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
@@ -314,8 +267,7 @@ function App() {
                                 <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
                                 </Text>
-                                {/* ✨ pdf-hide: 截圖時隱藏垃圾桶 */}
-                                <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
+                                <IconButton icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
                             </HStack>
                         </HStack>
                     </CardBody>
