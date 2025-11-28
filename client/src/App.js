@@ -32,10 +32,9 @@ function App() {
   const [rates, setRates] = useState({});
   const toast = useToast();
 
-  // --- 1. 抓取後端資料 (已更新為 Render 雲端網址) ---
+  // --- 1. 抓取後端資料 (使用 Render 雲端網址) ---
   const fetchRecords = async () => {
     try {
-      // ✨ 這裡改成你的 Render 網址
       const res = await fetch('https://my-accounting-app-1.onrender.com/api/records');
       const data = await res.json();
       setRecords(data);
@@ -126,7 +125,7 @@ function App() {
     });
   };
 
-  // --- 功能：新增記帳 (已更新為 Render 雲端網址) ---
+  // --- 功能：新增記帳 (使用 Render 雲端網址) ---
   const handleSubmit = async () => {
     if(!item || !cost || !category || !date) {
         toast({ title: "請填寫完整", status: "warning" });
@@ -143,7 +142,6 @@ function App() {
     };
     
     try {
-      // ✨ 這裡改成你的 Render 網址
       await fetch('https://my-accounting-app-1.onrender.com/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -159,10 +157,9 @@ function App() {
     }
   };
 
-  // --- 功能：刪除記帳 (已更新為 Render 雲端網址) ---
+  // --- 功能：刪除記帳 (使用 Render 雲端網址) ---
   const handleDelete = async (id) => {
       try {
-        // ✨ 這裡改成你的 Render 網址
         await fetch(`https://my-accounting-app-1.onrender.com/api/records/${id}`, { method: 'DELETE' });
         fetchRecords();
         toast({ title: "刪除成功", status: "info", duration: 1000 });
@@ -294,12 +291,13 @@ function App() {
                             <VStack align="start" spacing={0}>
                                 <Text fontWeight="bold">{record.item}</Text>
                                 <HStack>
-                                  {/* pdf-hide: 截圖時隱藏 */}
+                                  {/* pdf-hide: 截圖時隱藏這兩個標籤 */}
                                   <Badge className="pdf-hide" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
                                   <Badge className="pdf-hide" colorScheme="purple" variant="outline">{record.category}</Badge>
-                                  {/* 顯示載具 */}
+                                  
+                                  {/* ✨ 這裡就是我們剛修改的地方：加上 pdf-hide 讓載具在 PDF 中消失 */}
                                   {record.mobileBarcode && (
-                                      <Badge colorScheme="gray" variant="solid">📱 {record.mobileBarcode}</Badge>
+                                      <Badge className="pdf-hide" colorScheme="gray" variant="solid">📱 {record.mobileBarcode}</Badge>
                                   )}
                                 </HStack>
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
@@ -308,7 +306,7 @@ function App() {
                                 <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
                                 </Text>
-                                {/* pdf-hide: 截圖時隱藏 */}
+                                {/* pdf-hide: 截圖時隱藏垃圾桶 */}
                                 <IconButton className="pdf-hide" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
                             </HStack>
                         </HStack>
