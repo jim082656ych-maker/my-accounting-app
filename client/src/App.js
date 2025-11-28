@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react'; // ✨ 引入 useRef
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
   Card, CardBody, Stat, StatLabel, StatNumber, Badge, IconButton,
@@ -11,7 +11,7 @@ import StatisticsChart from './StatisticsChart';
 // --- 匯出套件 ---
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // 用來畫表格
+import autoTable from 'jspdf-autotable';
 
 const EXPENSE_CATS = ["飲食", "交通", "水電", "教育", "投資", "房租", "美裝與服飾", "通訊", "休閒", "其他"]; 
 const INCOME_CATS = ["薪水", "兼職", "投資", "零用錢", "其他"];
@@ -26,6 +26,9 @@ function App() {
   const [mobileBarcode, setMobileBarcode] = useState('');
   const [rates, setRates] = useState({});
   const toast = useToast();
+
+  // ✨ 這裡是用來暫存字型檔的變數 (快取)
+  const fontBase64Ref = useRef(null);
 
   const fetchRecords = async () => {
     try {
@@ -77,72 +80,67 @@ function App() {
     toast({ title: "Excel 下載成功", status: "success" });
   };
 
-  // --- ✨ 終極版 PDF 匯出 (文字模式 + 內嵌中文字型) ---
+  // --- ✨ 優化版 PDF 匯出 (字型只下載一次) ---
   const exportToPDF = async () => {
     try {
-      toast({ title: "正在產生報表...", description: "下載字型檔中，手機請稍候", status: "info", duration: 3000 });
+      toast({ title: "正在產生報表...", status: "info", duration: 1000 });
 
-      // 1. 從 public 資料夾讀取字型檔
-      const response = await fetch('/NotoSansTC-Regular.ttf');
-      
-      if (!response.ok) {
-        throw new Error("找不到字型檔 (client/public/NotoSansTC-Regular.ttf)");
-      }
-      
-      // 2. 轉成 Blob -> Base64
-      const fontBlob = await response.blob();
-      const reader = new FileReader();
-      reader.readAsDataURL(fontBlob);
-      
-      reader.onloadend = () => {
-        // 取得 Base64 字串 (去掉前面的 data: font/ttf;base64, ...)
-        const base64Font = reader.result.split(',')[1]; 
+      // 1. 檢查是否已經下載過字型
+      if (!fontBase64Ref.current) {
+        // 如果是第一次，才去下載 (這步只會執行一次)
+        console.log("正在下載字型檔..."); 
+        const response = await fetch('/NotoSansTC-Regular.ttf');
+        if (!response.ok) throw new Error("找不到字型檔");
+        const fontBlob = await response.blob();
         
-        const doc = new jsPDF();
-        
-        // 3. 將字型註冊到 PDF 引擎
-        doc.addFileToVFS("MyFont.ttf", base64Font);
-        doc.addFont("MyFont.ttf", "MyFont", "normal");
-        doc.setFont("MyFont"); // 設定全域使用這個字型
-
-        // 4. 寫入標題
-        doc.setFontSize(18);
-        doc.text("我的記帳本報表", 14, 15);
-        
-        doc.setFontSize(10);
-        doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 14, 22);
-
-        // 5. 準備表格資料
-        const tableColumn = ["日期", "項目", "類型", "分類", "金額", "載具"];
-        const tableRows = records.map(record => [
-          new Date(record.date).toLocaleDateString(),
-          record.item,
-          record.type === 'income' ? '收入' : '支出',
-          record.category,
-          `$${record.cost}`,
-          record.mobileBarcode || '-'
-        ]);
-
-        // 6. 產生表格 (使用 autoTable)
-        autoTable(doc, {
-          head: [tableColumn],
-          body: tableRows,
-          startY: 25,
-          styles: { 
-            font: "MyFont", // ✨ 關鍵：指定表格內容也要用這個中文字型
-            fontStyle: "normal" 
-          },
-          headStyles: { fillColor: [49, 151, 149] }, // 表頭顏色 (Teal)
+        // 轉 Base64 並存起來
+        await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(fontBlob);
+            reader.onloadend = () => {
+                fontBase64Ref.current = reader.result.split(',')[1];
+                resolve();
+            };
         });
+      }
 
-        // 7. 下載
-        doc.save("我的記帳本_正式版.pdf");
-        toast({ title: "PDF 下載成功", status: "success" });
-      };
+      // 2. 直接使用暫存的字型資料
+      const doc = new jsPDF();
+      doc.addFileToVFS("MyFont.ttf", fontBase64Ref.current);
+      doc.addFont("MyFont.ttf", "MyFont", "normal");
+      doc.setFont("MyFont");
+
+      // 3. 產生內容
+      doc.setFontSize(18);
+      doc.text("我的記帳本報表", 14, 15);
+      
+      doc.setFontSize(10);
+      doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 14, 22);
+
+      const tableColumn = ["日期", "項目", "類型", "分類", "金額", "載具"];
+      const tableRows = records.map(record => [
+        new Date(record.date).toLocaleDateString(),
+        record.item,
+        record.type === 'income' ? '收入' : '支出',
+        record.category,
+        `$${record.cost}`,
+        record.mobileBarcode || '-'
+      ]);
+
+      autoTable(doc, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 25,
+        styles: { font: "MyFont", fontStyle: "normal" },
+        headStyles: { fillColor: [49, 151, 149] },
+      });
+
+      doc.save("我的記帳本_正式版.pdf");
+      toast({ title: "PDF 下載成功", status: "success" });
 
     } catch (err) {
       console.error(err);
-      toast({ title: "PDF 製作失敗", description: "字型載入錯誤，請檢查 public 資料夾", status: "error" });
+      toast({ title: "PDF 製作失敗", description: "字型載入錯誤", status: "error" });
     }
   };
 
@@ -162,9 +160,7 @@ function App() {
       setDate(new Date().toISOString().split('T')[0]);
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
-    } catch (err) {
-      toast({ title: "新增失敗", status: "error" });
-    }
+    } catch (err) { toast({ title: "新增失敗", status: "error" }); }
   };
 
   const handleDelete = async (id) => {
@@ -183,7 +179,6 @@ function App() {
   return (
     <Box bg="gray.50" minH="100vh" py={8}>
       <Container maxW="md">
-        
         <VStack spacing={4} mb={6}>
           <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒</Heading>
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
