@@ -123,7 +123,7 @@ function App() {
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "新增失敗", status: "error" });
+      toast({ title: "新增失敗", description: "請確認網路連線", status: "error" });
     }
   };
 
@@ -143,7 +143,6 @@ function App() {
   return (
     <Box bg="gray.50" minH="100vh" py={8}>
       <Container maxW="md">
-        
         <VStack spacing={4} mb={6}>
           <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒</Heading>
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
@@ -198,6 +197,66 @@ function App() {
                         </InputGroup>
                     </FormControl>
                     <Input placeholder="項目 (ex: 午餐)" value={item} onChange={(e) => setItem(e.target.value)} variant="filled"/>
-                    <Select placeholder="請選擇分類" value={category} onChange={(e) =>
-                    // Final update for barcode
-                    
+                    <Select placeholder="請選擇分類" value={category} onChange={(e) => setCategory(e.target.value)} variant="filled">
+                        {(type === 'expense' ? EXPENSE_CATS : INCOME_CATS).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                    </Select>
+                    <Input placeholder="金額" type="number" value={cost} onChange={(e) => setCost(e.target.value)} variant="filled"/>
+                    <Button colorScheme={type === 'expense' ? "red" : "green"} w="100%" onClick={handleSubmit} leftIcon={<AddIcon />}>
+                        {type === 'expense' ? "新增支出" : "新增收入"}
+                    </Button>
+                </VStack>
+            </CardBody>
+        </Card>
+
+        <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
+            {records.slice(0, 50).map((record) => (
+                <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
+                    <CardBody py={3} px={4}>
+                        <HStack justify="space-between">
+                            <VStack align="start" spacing={0}>
+                                <Text fontWeight="bold">{record.item}</Text>
+                                <HStack>
+                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
+                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
+                                  
+                                  {/* 文字版載具 (確保一定看得到) */}
+                                  {record.mobileBarcode && (
+                                      <Badge colorScheme="gray" variant="solid" mt={1} fontSize="0.7em">📱 {record.mobileBarcode}</Badge>
+                                  )}
+                                </HStack>
+                                
+                                {/* ✨✨✨ 這裡改了：加上 displayValue={false} 隱藏條碼下的文字 ✨✨✨ */}
+                                {record.mobileBarcode && (
+                                  <Box mt={2} className="pdf-hide" data-html2canvas-ignore="true">
+                                    <Barcode 
+                                        value={record.mobileBarcode} 
+                                        height={30} 
+                                        fontSize={12} 
+                                        width={1.2} 
+                                        margin={0} 
+                                        displayValue={false} // 👈 關鍵：不顯示文字，只顯示條碼
+                                        background="transparent"
+                                    />
+                                  </Box>
+                                )}
+
+                                <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
+                            </VStack>
+                            <HStack>
+                                <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
+                                    {(record.type === 'income') ? "+ " : "- "} ${record.cost}
+                                </Text>
+                                <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
+                            </HStack>
+                        </HStack>
+                    </CardBody>
+                </Card>
+            ))}
+        </VStack>
+
+      </Container>
+    </Box>
+  );
+}
+
+export default App;
