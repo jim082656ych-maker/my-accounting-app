@@ -27,23 +27,14 @@ function App() {
   const [rates, setRates] = useState({});
   const toast = useToast();
 
-  // ✨✨✨ 關鍵魔法：自動判斷後端網址 ✨✨✨
-  // 如果網址列是 localhost，就連本機後端；否則連 Render 雲端
-  const BASE_URL = window.location.hostname === 'localhost' 
-    ? 'http://localhost:5000' 
-    : 'https://my-accounting-app-1.onrender.com';
-
-  // 1. 抓取資料
   const fetchRecords = async () => {
     try {
-      // 使用自動判斷的 BASE_URL
-      const res = await fetch(`${BASE_URL}/api/records`);
+      const res = await fetch('https://my-accounting-app-1.onrender.com/api/records');
       const data = await res.json();
       setRecords(data);
     } catch (err) { console.error("連線錯誤:", err); }
   };
 
-  // 2. 抓取匯率
   const fetchRates = async () => {
     try {
       const res = await fetch('https://api.exchangerate-api.com/v4/latest/USD');
@@ -55,7 +46,7 @@ function App() {
         EUR: usdToTwd / data.rates.EUR, 
         CNY: usdToTwd / data.rates.CNY  
       });
-    } catch (err) { console.error("匯率抓取失敗", err); }
+    } catch (err) { console.error(err); }
   };
 
   useEffect(() => {
@@ -122,8 +113,7 @@ function App() {
     }
     const newRecord = { item, cost: parseInt(cost), category, type, date: new Date(date), mobileBarcode };
     try {
-      // 使用 BASE_URL
-      await fetch(`${BASE_URL}/api/records`, {
+      await fetch('https://my-accounting-app-1.onrender.com/api/records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord),
@@ -133,14 +123,13 @@ function App() {
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "新增失敗", description: "請確認後端開啟", status: "error" });
+      toast({ title: "新增失敗", description: "請確認網路連線", status: "error" });
     }
   };
 
   const handleDelete = async (id) => {
       try {
-        // 使用 BASE_URL
-        await fetch(`${BASE_URL}/api/records/${id}`, { method: 'DELETE' });
+        await fetch(`https://my-accounting-app-1.onrender.com/api/records/${id}`, { method: 'DELETE' });
         fetchRecords();
         toast({ title: "刪除成功", status: "info", duration: 1000 });
       } catch (err) { console.error(err); }
@@ -224,28 +213,38 @@ function App() {
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
                     <CardBody py={3} px={4}>
                         <HStack justify="space-between">
-                            <VStack align="start" spacing={0}>
-                                <Text fontWeight="bold">{record.item}</Text>
-                                <HStack>
+                            <VStack align="start" spacing={0} width="70%"> {/* ✨ 限制寬度，讓條碼有空間 */}
+                                <Text fontWeight="bold" fontSize="lg">{record.item}</Text>
+                                <HStack mt={1}>
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
-                                  
-                                  {/* 載具：網頁顯示，PDF 隱藏 (pdf-hide) */}
-                                  {record.mobileBarcode && (
-                                    <Box mt={2} className="pdf-hide" data-html2canvas-ignore="true">
-                                        <Barcode value={record.mobileBarcode} height={30} fontSize={12} width={1.5} margin={0} background="transparent"/>
-                                    </Box>
-                                  )}
+                                  <Text fontSize="xs" color="gray.400" ml={2}>{new Date(record.date).toLocaleDateString()}</Text>
                                 </HStack>
-                                <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
-                            <HStack>
+                            
+                            {/* ✨ 價格與垃圾桶區 */}
+                            <VStack align="end" spacing={1}>
                                 <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
                                 </Text>
                                 <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
-                            </HStack>
+                            </VStack>
                         </HStack>
+
+                        {/* ✨✨✨ 載具條碼：獨立顯示在下方，不會跟上面打架 ✨✨✨ */}
+                        {record.mobileBarcode && (
+                          <Box mt={3} pt={2} borderTop="1px dashed #E2E8F0" className="pdf-hide" data-html2canvas-ignore="true">
+                            <Text fontSize="xs" color="gray.500" mb={1}>載具憑證：</Text>
+                            <Barcode 
+                                value={record.mobileBarcode} 
+                                height={30} 
+                                fontSize={12} 
+                                width={1.5} 
+                                margin={0} 
+                                background="transparent"
+                            />
+                          </Box>
+                        )}
                     </CardBody>
                 </Card>
             ))}
