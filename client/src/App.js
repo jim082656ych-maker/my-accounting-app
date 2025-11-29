@@ -199,4 +199,5 @@ function App() {
                     </FormControl>
                     <Input placeholder="項目 (ex: 午餐)" value={item} onChange={(e) => setItem(e.target.value)} variant="filled"/>
                     <Select placeholder="請選擇分類" value={category} onChange={(e) =>
+                    // Final update for barcode
                     
