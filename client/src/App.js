@@ -170,4 +170,91 @@ function App() {
               <Box><Text fontSize="xs">🇪🇺 歐元</Text><Text fontWeight="bold">{rates.EUR?.toFixed(2)}</Text></Box>
               <Box><Text fontSize="xs">🇨🇳 人民幣</Text><Text fontWeight="bold">{rates.CNY?.toFixed(2)}</Text></Box>
             </SimpleGrid>
-            
+          </CardBody>
+        </Card>
+
+        <StatisticsChart data={records} currentType={type} />
+
+        <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
+            <CardBody>
+                <VStack spacing={4}>
+                    <RadioGroup onChange={setType} value={type} w="100%">
+                      <Stack direction='row' justify="center" spacing={6}>
+                        <Radio value='expense' colorScheme='red' size="lg">🔴 支出</Radio>
+                        <Radio value='income' colorScheme='green' size="lg">🟢 收入</Radio>
+                      </Stack>
+                    </RadioGroup>
+                    <Divider />
+                    <FormControl>
+                        <FormLabel fontSize="sm" color="gray.500">日期</FormLabel>
+                        <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
+                    </FormControl>
+                    <FormControl>
+                        <FormLabel fontSize="sm" color="gray.500">載具號碼 (可選)</FormLabel>
+                        <InputGroup>
+                            <Input placeholder="/ABC.123" value={mobileBarcode} onChange={(e) => setMobileBarcode(e.target.value)} variant="filled" />
+                            <InputRightElement width="4.5rem"><Button h="1.75rem" size="sm" onClick={handlePaste}>貼上</Button></InputRightElement>
+                        </InputGroup>
+                    </FormControl>
+                    <Input placeholder="項目 (ex: 午餐)" value={item} onChange={(e) => setItem(e.target.value)} variant="filled"/>
+                    <Select placeholder="請選擇分類" value={category} onChange={(e) => setCategory(e.target.value)} variant="filled">
+                        {(type === 'expense' ? EXPENSE_CATS : INCOME_CATS).map(cat => (<option key={cat} value={cat}>{cat}</option>))}
+                    </Select>
+                    <Input placeholder="金額" type="number" value={cost} onChange={(e) => setCost(e.target.value)} variant="filled"/>
+                    <Button colorScheme={type === 'expense' ? "red" : "green"} w="100%" onClick={handleSubmit} leftIcon={<AddIcon />}>
+                        {type === 'expense' ? "新增支出" : "新增收入"}
+                    </Button>
+                </VStack>
+            </CardBody>
+        </Card>
+
+        <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
+            {records.slice(0, 50).map((record) => (
+                <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
+                    <CardBody py={3} px={4}>
+                        <HStack justify="space-between">
+                            <VStack align="start" spacing={0}>
+                                <Text fontWeight="bold">{record.item}</Text>
+                                <HStack>
+                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
+                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
+                                  
+                                  {record.mobileBarcode && (
+                                      <Badge colorScheme="gray" variant="solid" mt={1} fontSize="0.7em">📱 {record.mobileBarcode}</Badge>
+                                  )}
+                                </HStack>
+                                
+                                {record.mobileBarcode && (
+                                  <Box mt={2} className="pdf-hide" data-html2canvas-ignore="true">
+                                    <Barcode 
+                                        value={record.mobileBarcode} 
+                                        height={30} 
+                                        fontSize={12} 
+                                        width={1.2} 
+                                        margin={0} 
+                                        displayValue={false} 
+                                        background="transparent"
+                                    />
+                                  </Box>
+                                )}
+
+                                <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
+                            </VStack>
+                            <HStack>
+                                <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
+                                    {(record.type === 'income') ? "+ " : "- "} ${record.cost}
+                                </Text>
+                                <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
+                            </HStack>
+                        </HStack>
+                    </CardBody>
+                </Card>
+            ))}
+        </VStack>
+
+      </Container>
+    </Box>
+  );
+}
+
+export default App;
