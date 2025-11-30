@@ -1,4 +1,4 @@
-// Final Fix v8.0: Force Barcode format to CODE39 (Taiwan Standard)
+// Final Fix v9.0: Generate CLEAN PDF Table (Not App Screenshot)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
@@ -78,17 +78,18 @@ function App() {
     toast({ title: "Excel 下載成功", status: "success" });
   };
 
+  // ✨✨✨ 修改後的 PDF 匯出功能：抓取隱藏的「漂亮表格」來生成 ✨✨✨
   const exportToPDF = () => {
-    const input = document.getElementById('record-list'); 
+    const input = document.getElementById('pdf-report-view'); // 抓取那個隱藏的漂亮表格
     if (!input) {
-      toast({ title: "找不到資料區域", status: "error" });
+      toast({ title: "找不到報表區域", status: "error" });
       return;
     }
     toast({ title: "正在製作 PDF...", status: "info", duration: 1000 });
 
     html2canvas(input, { 
-      scale: 2, 
-      ignoreElements: (element) => element.classList.contains('pdf-hide')
+      scale: 2, // 提高解析度
+      useCORS: true
     }).then((canvas) => {
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -96,9 +97,8 @@ function App() {
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      pdf.text("My Accounting App (Recent 50)", 14, 10); 
-      pdf.addImage(imgData, 'PNG', 0, 20, pdfWidth, pdfHeight); 
-      pdf.save("我的記帳本_Snapshot.pdf");
+      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+      pdf.save("我的記帳本_正式報表.pdf");
       
       toast({ title: "PDF 下載成功", status: "success" });
     }).catch(err => {
@@ -143,10 +143,48 @@ function App() {
 
   return (
     <Box bg="gray.50" minH="100vh" py={8}>
+      
+      {/* ✨✨✨ 隱藏的 PDF 報表專用區 (使用者看不到，但 PDF 會抓這裡) ✨✨✨ */}
+      <Box position="fixed" left="-9999px" top="0" id="pdf-report-view" bg="white" p={10} width="210mm" minH="297mm">
+        <Heading size="lg" mb={2} textAlign="center" color="black">我的記帳本 - 收支明細</Heading>
+        <Text textAlign="center" mb={6} color="gray.600">匯出日期: {new Date().toLocaleDateString()}</Text>
+        
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+            <thead>
+                <tr style={{ borderBottom: '2px solid #333', backgroundColor: '#f0f0f0' }}>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>日期</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>項目</th>
+                    <th style={{ padding: '8px', textAlign: 'left' }}>分類</th>
+                    <th style={{ padding: '8px', textAlign: 'center' }}>類型</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>金額</th>
+                    <th style={{ padding: '8px', textAlign: 'right' }}>載具號碼</th>
+                </tr>
+            </thead>
+            <tbody>
+                {records.map((r, index) => (
+                    <tr key={index} style={{ borderBottom: '1px solid #ddd' }}>
+                        <td style={{ padding: '8px' }}>{new Date(r.date).toLocaleDateString()}</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>{r.item}</td>
+                        <td style={{ padding: '8px' }}>{r.category}</td>
+                        <td style={{ padding: '8px', textAlign: 'center', color: r.type === 'income' ? 'green' : 'red' }}>
+                            {r.type === 'income' ? '收入' : '支出'}
+                        </td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>${r.cost}</td>
+                        <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{r.mobileBarcode}</td>
+                    </tr>
+                ))}
+            </tbody>
+        </table>
+        <Box mt={8} textAlign="right">
+             <Text fontSize="xl" fontWeight="bold">總資產: ${totalBalance}</Text>
+        </Box>
+      </Box>
+      {/* ✨✨✨ 隱藏區結束 ✨✨✨ */}
+
       <Container maxW="md">
         <VStack spacing={4} mb={6}>
-          {/* v8.0 標題 */}
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v8.0)</Heading>
+          {/* v9.0 標題 - 代表完美報表版 */}
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v9.0)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -194,7 +232,7 @@ function App() {
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
                     </FormControl>
                     
-                    {/* 輸入預覽區：這裡的條碼改為 Code 39 格式！ */}
+                    {/* 輸入預覽區：Code 39 格式 */}
                     <FormControl>
                         <FormLabel fontSize="sm" color="gray.500">載具號碼 (可選)</FormLabel>
                         <InputGroup>
@@ -207,8 +245,8 @@ function App() {
                                 <Box display="flex" justifyContent="center">
                                     <Barcode 
                                         value={mobileBarcode || "Preview"} 
-                                        format="CODE39"   // ✨✨✨ 關鍵修改：指定為台灣手機條碼格式 ✨✨✨
-                                        height={50}       // 高度調高一點，跟官方 App 比較像
+                                        format="CODE39"   
+                                        height={50}       
                                         fontSize={14}
                                         width={1.5}
                                         background="transparent"
@@ -230,7 +268,7 @@ function App() {
             </CardBody>
         </Card>
 
-        {/* 紀錄列表 (依然保持乾淨，無條碼) */}
+        {/* 紀錄列表 (維持乾淨版面) */}
         <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
             {records.slice(0, 50).map((record) => (
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
@@ -266,5 +304,3 @@ function App() {
 }
 
 export default App;
-
-
