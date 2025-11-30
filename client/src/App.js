@@ -1,3 +1,4 @@
+// Final Fix: Complete code with hidden barcode text
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
