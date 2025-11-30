@@ -3,4 +3,5 @@
     "@google/generative-ai": "^0.24.1",
     "react-barcode": "^1.6.1"
   }
+  
 }
