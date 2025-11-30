@@ -1,10 +1,10 @@
-// Final Fix: Complete code with hidden barcode text
+// Final Fix: Layout adjustment for Barcode and Income alignment
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
   Card, CardBody, Stat, StatLabel, StatNumber, Badge, IconButton,
   Select, Radio, RadioGroup, Stack, Divider, ButtonGroup, SimpleGrid,
-  FormControl, FormLabel, InputGroup, InputRightElement
+  FormControl, FormLabel, InputGroup, InputRightElement, Flex
 } from '@chakra-ui/react';
 import { DeleteIcon, AddIcon, DownloadIcon } from '@chakra-ui/icons';
 import StatisticsChart from './StatisticsChart';
@@ -213,41 +213,42 @@ function App() {
             {records.slice(0, 50).map((record) => (
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
                     <CardBody py={3} px={4}>
-                        <HStack justify="space-between">
-                            <VStack align="start" spacing={0}>
-                                <Text fontWeight="bold">{record.item}</Text>
-                                <HStack>
+                        <Flex justify="space-between" align="center">
+                            <VStack align="start" spacing={1} maxW="70%">
+                                <Text fontWeight="bold" fontSize="md" isTruncated maxW="100%">{record.item}</Text>
+                                <HStack spacing={2} wrap="wrap">
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
                                   
+                                  {/* 🛠️ 這裡改了！迷你條碼區塊，強制不顯示文字，高度變矮 */}
                                   {record.mobileBarcode && (
-                                      <Badge colorScheme="gray" variant="solid" mt={1} fontSize="0.7em">📱 {record.mobileBarcode}</Badge>
+                                    <HStack spacing={1} className="pdf-hide" data-html2canvas-ignore="true" bg="gray.100" px={2} py={0.5} borderRadius="md" border="1px solid" borderColor="gray.200">
+                                        <Text fontSize="2xs" color="gray.600" fontWeight="bold" fontFamily="monospace">{record.mobileBarcode}</Text>
+                                        <Box display="flex" alignItems="center" h="15px" overflow="hidden">
+                                            <Barcode 
+                                                value={record.mobileBarcode} 
+                                                height={25}   
+                                                fontSize={0}  
+                                                width={1.2}     
+                                                margin={0} 
+                                                displayValue={false} 
+                                                background="transparent"
+                                            />
+                                        </Box>
+                                    </HStack>
                                   )}
                                 </HStack>
-                                
-                                {record.mobileBarcode && (
-                                  <Box mt={2} className="pdf-hide" data-html2canvas-ignore="true">
-                                    <Barcode 
-                                        value={record.mobileBarcode} 
-                                        height={30} 
-                                        fontSize={12} 
-                                        width={1.2} 
-                                        margin={0} 
-                                        displayValue={false} 
-                                        background="transparent"
-                                    />
-                                  </Box>
-                                )}
-
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
+
+                            {/* 右側金額與刪除鈕 */}
                             <HStack>
-                                <Text fontWeight="bold" color={(record.type === 'income') ? "green.500" : "red.500"}>
+                                <Text fontWeight="bold" fontSize="lg" color={(record.type === 'income') ? "green.500" : "red.500"}>
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
                                 </Text>
                                 <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
                             </HStack>
-                        </HStack>
+                        </Flex>
                     </CardBody>
                 </Card>
             ))}
