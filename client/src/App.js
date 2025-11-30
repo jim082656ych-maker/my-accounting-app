@@ -1,4 +1,4 @@
-// Final Fix v7.0: Clean List View (Remove Barcode from List completely)
+// Final Fix v8.0: Force Barcode format to CODE39 (Taiwan Standard)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
@@ -145,8 +145,8 @@ function App() {
     <Box bg="gray.50" minH="100vh" py={8}>
       <Container maxW="md">
         <VStack spacing={4} mb={6}>
-          {/* v7.0 標題 */}
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v7.0)</Heading>
+          {/* v8.0 標題 */}
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v8.0)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -178,7 +178,7 @@ function App() {
 
         <StatisticsChart data={records} currentType={type} />
 
-        {/* 輸入區域 (保留條碼預覽) */}
+        {/* 輸入區域 */}
         <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
             <CardBody>
                 <VStack spacing={4}>
@@ -194,7 +194,7 @@ function App() {
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
                     </FormControl>
                     
-                    {/* 輸入時，下面會即時顯示條碼圖片，讓你確認載具是對的 */}
+                    {/* 輸入預覽區：這裡的條碼改為 Code 39 格式！ */}
                     <FormControl>
                         <FormLabel fontSize="sm" color="gray.500">載具號碼 (可選)</FormLabel>
                         <InputGroup>
@@ -203,11 +203,12 @@ function App() {
                         </InputGroup>
                         <Collapse in={mobileBarcode.length > 0} animateOpacity>
                             <Box mt={3} p={2} bg="gray.100" borderRadius="md" textAlign="center" border="1px dashed" borderColor="gray.300">
-                                <Text fontSize="xs" color="gray.500" mb={1}>載具預覽</Text>
+                                <Text fontSize="xs" color="gray.500" mb={1}>載具預覽 (Code 39)</Text>
                                 <Box display="flex" justifyContent="center">
                                     <Barcode 
                                         value={mobileBarcode || "Preview"} 
-                                        height={40}
+                                        format="CODE39"   // ✨✨✨ 關鍵修改：指定為台灣手機條碼格式 ✨✨✨
+                                        height={50}       // 高度調高一點，跟官方 App 比較像
                                         fontSize={14}
                                         width={1.5}
                                         background="transparent"
@@ -229,7 +230,7 @@ function App() {
             </CardBody>
         </Card>
 
-        {/* 紀錄列表 (完全移除條碼顯示) */}
+        {/* 紀錄列表 (依然保持乾淨，無條碼) */}
         <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
             {records.slice(0, 50).map((record) => (
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
@@ -243,9 +244,7 @@ function App() {
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
                                 </HStack>
-                                
-                                {/* 這裡空空如也！沒有條碼，沒有文字！還你乾淨版面！ */}
-                                
+
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
 
