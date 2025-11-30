@@ -261,3 +261,6 @@ function App() {
 
 export default App;
 // Force Vercel Update: 2025-11-29 v2
+// Fix Vercel Deploy 01
+import React, { useState, useEffect } from 'react';
+...
