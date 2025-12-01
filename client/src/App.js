@@ -1,4 +1,4 @@
-// Final Fix v9.0: Generate CLEAN PDF Table (Not App Screenshot)
+// Final Fix v10.0: Multi-page PDF Support (Auto Pagination)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
@@ -78,9 +78,9 @@ function App() {
     toast({ title: "Excel 下載成功", status: "success" });
   };
 
-  // ✨✨✨ 修改後的 PDF 匯出功能：抓取隱藏的「漂亮表格」來生成 ✨✨✨
+  // ✨✨✨ v10.0 修改：支援多頁 PDF 匯出 ✨✨✨
   const exportToPDF = () => {
-    const input = document.getElementById('pdf-report-view'); // 抓取那個隱藏的漂亮表格
+    const input = document.getElementById('pdf-report-view');
     if (!input) {
       toast({ title: "找不到報表區域", status: "error" });
       return;
@@ -88,17 +88,32 @@ function App() {
     toast({ title: "正在製作 PDF...", status: "info", duration: 1000 });
 
     html2canvas(input, { 
-      scale: 2, // 提高解析度
-      useCORS: true
+      scale: 2, 
+      useCORS: true 
     }).then((canvas) => {
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgProps = pdf.getImageProperties(imgData);
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
       
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save("我的記帳本_正式報表.pdf");
+      const imgWidth = 210; // A4 寬度 (mm)
+      const pageHeight = 297; // A4 高度 (mm)
+      const imgHeight = (canvas.height * imgWidth) / canvas.width; // 依比例計算圖片高度
+      
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      // 第一頁
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      // 如果還有剩餘高度，就新增頁面繼續貼
+      while (heightLeft >= 0) {
+        position = position - pageHeight; // 將圖片往上推，顯示下一部分
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+      
+      pdf.save("我的記帳本_完整報表.pdf");
       
       toast({ title: "PDF 下載成功", status: "success" });
     }).catch(err => {
@@ -144,7 +159,7 @@ function App() {
   return (
     <Box bg="gray.50" minH="100vh" py={8}>
       
-      {/* ✨✨✨ 隱藏的 PDF 報表專用區 (使用者看不到，但 PDF 會抓這裡) ✨✨✨ */}
+      {/* PDF 報表專用區 (隱藏) - 移除固定高度，讓它自動長高以便切割 */}
       <Box position="fixed" left="-9999px" top="0" id="pdf-report-view" bg="white" p={10} width="210mm" minH="297mm">
         <Heading size="lg" mb={2} textAlign="center" color="black">我的記帳本 - 收支明細</Heading>
         <Text textAlign="center" mb={6} color="gray.600">匯出日期: {new Date().toLocaleDateString()}</Text>
@@ -179,12 +194,11 @@ function App() {
              <Text fontSize="xl" fontWeight="bold">總資產: ${totalBalance}</Text>
         </Box>
       </Box>
-      {/* ✨✨✨ 隱藏區結束 ✨✨✨ */}
 
       <Container maxW="md">
         <VStack spacing={4} mb={6}>
-          {/* v9.0 標題 - 代表完美報表版 */}
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v9.0)</Heading>
+          {/* v10.0 標題 */}
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v10.0)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -216,7 +230,7 @@ function App() {
 
         <StatisticsChart data={records} currentType={type} />
 
-        {/* 輸入區域 */}
+        {/* 輸入區域 (保持 v8.0 的 Code 39 預覽) */}
         <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
             <CardBody>
                 <VStack spacing={4}>
@@ -304,3 +318,4 @@ function App() {
 }
 
 export default App;
+
