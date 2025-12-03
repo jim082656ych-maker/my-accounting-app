@@ -1,4 +1,4 @@
-// Final Fix v10.0: Multi-page PDF Support (Auto Pagination)
+// Final Fix v11.0: Auto-save Mobile Barcode (Memory Feature)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
@@ -53,15 +53,30 @@ function App() {
   useEffect(() => {
     fetchRecords();
     fetchRates();
+    
+    // ✨✨✨ 這裡新增：App 一打開，就去檢查有沒有「存檔過的載具」 ✨✨✨
+    const savedBarcode = localStorage.getItem('my_mobile_barcode');
+    if (savedBarcode) {
+      setMobileBarcode(savedBarcode);
+    }
   }, []);
 
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
       setMobileBarcode(text);
-      toast({ title: "已貼上", status: "success", duration: 1000 });
+      // ✨ 貼上的時候，也順便存起來
+      localStorage.setItem('my_mobile_barcode', text);
+      toast({ title: "已貼上並記憶", status: "success", duration: 1000 });
     } catch (err) { toast({ title: "貼上失敗", status: "error" }); }
   };
+
+  // 當使用者手動打字修改載具時，也同步存檔
+  const handleBarcodeChange = (e) => {
+      const val = e.target.value;
+      setMobileBarcode(val);
+      localStorage.setItem('my_mobile_barcode', val);
+  }
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
@@ -78,7 +93,6 @@ function App() {
     toast({ title: "Excel 下載成功", status: "success" });
   };
 
-  // ✨✨✨ v10.0 修改：支援多頁 PDF 匯出 ✨✨✨
   const exportToPDF = () => {
     const input = document.getElementById('pdf-report-view');
     if (!input) {
@@ -94,20 +108,18 @@ function App() {
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       
-      const imgWidth = 210; // A4 寬度 (mm)
-      const pageHeight = 297; // A4 高度 (mm)
-      const imgHeight = (canvas.height * imgWidth) / canvas.width; // 依比例計算圖片高度
+      const imgWidth = 210; 
+      const pageHeight = 297; 
+      const imgHeight = (canvas.height * imgWidth) / canvas.width; 
       
       let heightLeft = imgHeight;
       let position = 0;
 
-      // 第一頁
       pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
       heightLeft -= pageHeight;
 
-      // 如果還有剩餘高度，就新增頁面繼續貼
       while (heightLeft >= 0) {
-        position = position - pageHeight; // 將圖片往上推，顯示下一部分
+        position = position - pageHeight;
         pdf.addPage();
         pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
         heightLeft -= pageHeight;
@@ -134,7 +146,13 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord),
       });
-      setItem(''); setCost(''); setCategory(''); setMobileBarcode('');
+      
+      // ✨✨✨ 這裡修改：新增成功後，只清空項目、金額、分類，**保留載具**！ ✨✨✨
+      setItem(''); 
+      setCost(''); 
+      setCategory(''); 
+      // setMobileBarcode('');  <-- 這一行被我刪掉了，這樣載具就不會消失！
+      
       setDate(new Date().toISOString().split('T')[0]);
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
@@ -159,7 +177,7 @@ function App() {
   return (
     <Box bg="gray.50" minH="100vh" py={8}>
       
-      {/* PDF 報表專用區 (隱藏) - 移除固定高度，讓它自動長高以便切割 */}
+      {/* PDF 報表專用區 (隱藏) */}
       <Box position="fixed" left="-9999px" top="0" id="pdf-report-view" bg="white" p={10} width="210mm" minH="297mm">
         <Heading size="lg" mb={2} textAlign="center" color="black">我的記帳本 - 收支明細</Heading>
         <Text textAlign="center" mb={6} color="gray.600">匯出日期: {new Date().toLocaleDateString()}</Text>
@@ -197,8 +215,8 @@ function App() {
 
       <Container maxW="md">
         <VStack spacing={4} mb={6}>
-          {/* v10.0 標題 */}
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v10.0)</Heading>
+          {/* v11.0 標題 - 貼心記憶版 */}
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v11.0)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -230,7 +248,7 @@ function App() {
 
         <StatisticsChart data={records} currentType={type} />
 
-        {/* 輸入區域 (保持 v8.0 的 Code 39 預覽) */}
+        {/* 輸入區域 */}
         <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
             <CardBody>
                 <VStack spacing={4}>
@@ -246,11 +264,16 @@ function App() {
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
                     </FormControl>
                     
-                    {/* 輸入預覽區：Code 39 格式 */}
+                    {/* 輸入預覽區 */}
                     <FormControl>
-                        <FormLabel fontSize="sm" color="gray.500">載具號碼 (可選)</FormLabel>
+                        <FormLabel fontSize="sm" color="gray.500">載具號碼 (自動記憶)</FormLabel>
                         <InputGroup>
-                            <Input placeholder="/ABC.123" value={mobileBarcode} onChange={(e) => setMobileBarcode(e.target.value)} variant="filled" />
+                            <Input 
+                                placeholder="/ABC.123" 
+                                value={mobileBarcode} 
+                                onChange={handleBarcodeChange} // 改用新的處理函數
+                                variant="filled" 
+                            />
                             <InputRightElement width="4.5rem"><Button h="1.75rem" size="sm" onClick={handlePaste}>貼上</Button></InputRightElement>
                         </InputGroup>
                         <Collapse in={mobileBarcode.length > 0} animateOpacity>
@@ -282,7 +305,7 @@ function App() {
             </CardBody>
         </Card>
 
-        {/* 紀錄列表 (維持乾淨版面) */}
+        {/* 紀錄列表 */}
         <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
             {records.slice(0, 50).map((record) => (
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
@@ -318,5 +341,3 @@ function App() {
 }
 
 export default App;
-// Final V10 Force Update
-
