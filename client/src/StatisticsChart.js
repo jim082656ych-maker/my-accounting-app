@@ -3,13 +3,20 @@ import {
   Box, Text, useColorModeValue, Tabs, TabList, TabPanels, Tab, TabPanel, 
   Center, Button, ButtonGroup, Flex, useDisclosure,
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalCloseButton, ModalBody,
-  Icon
+  Icon, useToast
 } from '@chakra-ui/react';
-import { InfoIcon, SearchIcon } from '@chakra-ui/icons';
+// 引入下載圖示
+import { DownloadIcon } from '@chakra-ui/icons'; 
 import { 
   PieChart, Pie, Cell, Tooltip, Legend, ResponsiveContainer,
   LineChart, Line, XAxis, YAxis, CartesianGrid, AreaChart, Area
 } from 'recharts';
+
+// --- PDF 相關引入 ---
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+// ✅ 路徑修正：因為檔案都在 src 資料夾，所以用 './NotoFont'
+import { notoBase64 } from './NotoFont'; 
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#AF19FF', '#FF1919', '#38B2AC', '#805AD5'];
 
@@ -26,6 +33,7 @@ const StatisticsChart = ({ data }) => {
   const bg = useColorModeValue("white", "gray.800");
   const { isOpen, onOpen, onClose } = useDisclosure(); // 控制放大視窗
   const [zoomType, setZoomType] = useState('line'); // 記錄現在是放大圓餅圖還是折線圖
+  const toast = useToast(); // 用來顯示成功或失敗的提示
   
   // 狀態管理
   const [chartCategory, setChartCategory] = useState('expense'); // 'expense' | 'income' | 'net'
@@ -43,7 +51,6 @@ const StatisticsChart = ({ data }) => {
     const isMonthlyMode = timeRange > 90;
 
     // --- 資料過濾 ---
-    // 總資產模式：拿全部資料；收支模式：只拿該類型的資料
     const filteredByDate = data.filter(r => new Date(r.date) >= startDate);
     const targetData = chartCategory === 'net' 
         ? filteredByDate 
@@ -54,7 +61,6 @@ const StatisticsChart = ({ data }) => {
     // ==========================
     let calculatedPieData = [];
     if (chartCategory === 'net') {
-        // 總資產模式：圓餅圖顯示「總收入 vs 總支出」
         const totalIncome = targetData.filter(r => r.type === 'income').reduce((acc, curr) => acc + curr.cost, 0);
         const totalExpense = targetData.filter(r => (r.type || 'expense') === 'expense').reduce((acc, curr) => acc + curr.cost, 0);
         if (totalIncome > 0 || totalExpense > 0) {
@@ -64,7 +70,6 @@ const StatisticsChart = ({ data }) => {
             ];
         }
     } else {
-        // 一般模式：依分類統計
         calculatedPieData = targetData.reduce((acc, curr) => {
             const catName = curr.category || "其他";
             const found = acc.find(item => item.name === catName);
@@ -79,7 +84,6 @@ const StatisticsChart = ({ data }) => {
     // ==========================
     let calculatedLineData = [];
 
-    // Helper: 取得日期 Key (日: MM/DD, 月: YYYY-MM)
     const getDateKey = (dateStr) => {
         const d = new Date(dateStr);
         if (isMonthlyMode) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -87,9 +91,6 @@ const StatisticsChart = ({ data }) => {
     };
 
     if (chartCategory === 'net') {
-        // --- 總資產趨勢 (累積餘額) ---
-        // 為了算餘額，必須從「盤古開天闢地」開始算，不能只算 startDate 之後
-        // 先把所有歷史資料排序
         const allSorted = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
         let runningBalance = 0;
         const balanceMap = new Map();
@@ -99,18 +100,14 @@ const StatisticsChart = ({ data }) => {
             if (record.type === 'income') runningBalance += amount;
             else runningBalance -= amount;
 
-            // 記錄該時間點的餘額
             const key = getDateKey(record.date);
-            // 如果是月模式，這裡會不斷更新該月的「最後餘額」
             balanceMap.set(key, { name: key, total: runningBalance, rawDate: new Date(record.date) });
         });
 
-        // 過濾出 startDate 之後的點
         calculatedLineData = Array.from(balanceMap.values())
             .filter(item => item.rawDate >= startDate);
 
     } else {
-        // --- 收入/支出趨勢 (區間加總) ---
         const groupMap = targetData.reduce((acc, curr) => {
             const key = getDateKey(curr.date);
             if (!acc[key]) {
@@ -127,7 +124,80 @@ const StatisticsChart = ({ data }) => {
   }, [data, chartCategory, timeRange]);
 
 
-  // 渲染圖表的函式 (重複利用)
+  // ==========================
+  // ✨ PDF 匯出功能 (修正版)
+  // ==========================
+  const exportPDF = () => {
+    try {
+        if (!data || data.length === 0) {
+            toast({ title: "無資料可匯出", status: "warning", duration: 2000 });
+            return;
+        }
+
+        const doc = new jsPDF();
+
+        // 1. 設定中文字型 (解決 Android 亂碼關鍵)
+        const fontFileName = "NotoSansTC-Regular.ttf";
+        // 將 Base64 注入虛擬檔案系統
+        doc.addFileToVFS(fontFileName, notoBase64);
+        // 註冊字型
+        doc.addFont(fontFileName, "NotoSansTC", "normal");
+        // 設定字型
+        doc.setFont("NotoSansTC");
+
+        // 2. 準備要列印的資料
+        const now = new Date();
+        const startDate = new Date();
+        startDate.setDate(now.getDate() - timeRange);
+        
+        // 依照目前的分類 (ChartCategory) 篩選資料
+        let reportData = data.filter(r => new Date(r.date) >= startDate);
+        if (chartCategory !== 'net') {
+            reportData = reportData.filter(r => (r.type || 'expense') === chartCategory);
+        }
+        // 依照日期排序 (新 -> 舊)
+        reportData.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        // 3. 繪製標題
+        doc.setFontSize(20);
+        const titleMap = { expense: '支出報表', income: '收入報表', net: '總資產變動報表' };
+        doc.text(`我的記帳本 - ${titleMap[chartCategory]}`, 105, 15, { align: 'center' });
+        
+        doc.setFontSize(10);
+        doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 105, 22, { align: 'center' });
+
+        // 4. 繪製表格
+        const tableColumn = ["日期", "項目", "類別", "金額"];
+        const tableRows = reportData.map(item => [
+            new Date(item.date).toLocaleDateString(),
+            item.title,
+            item.category || '-',
+            // 根據收支加正負號
+            item.type === 'income' ? `+${item.cost}` : `-${item.cost}`
+        ]);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 30,
+            styles: { font: "NotoSansTC", fontStyle: "normal" }, // 表格內也要指定字型
+            headStyles: { fillColor: chartCategory === 'income' ? [56, 161, 105] : [229, 62, 62] },
+        });
+
+        // 5. 存檔
+        const fileName = `Report_${chartCategory}_${new Date().toISOString().slice(0,10)}.pdf`;
+        doc.save(fileName);
+        
+        toast({ title: "PDF 下載成功", description: `檔案: ${fileName}`, status: "success", duration: 2000 });
+
+    } catch (error) {
+        console.error("PDF Error:", error);
+        toast({ title: "匯出失敗", description: error.message, status: "error", duration: 3000 });
+    }
+  };
+
+
+  // 渲染圖表的函式
   const renderPieChart = () => (
     <ResponsiveContainer width="100%" height="100%">
       <PieChart>
@@ -236,6 +306,20 @@ const StatisticsChart = ({ data }) => {
           </TabPanel>
         </TabPanels>
       </Tabs>
+
+      {/* ✅ PDF 匯出按鈕區 */}
+      <Flex justify="center" mt={4}>
+         <Button 
+            leftIcon={<DownloadIcon />} 
+            colorScheme="gray" 
+            variant="outline" 
+            size="sm"
+            onClick={exportPDF}
+         >
+            匯出 {chartCategory === 'expense' ? '支出' : (chartCategory === 'income' ? '收入' : '資產')} PDF 報表
+         </Button>
+      </Flex>
+
     </Box>
 
     {/* ✨ 放大顯示的 Modal (彈出視窗) ✨ */}

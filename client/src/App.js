@@ -1,4 +1,4 @@
-// Final Fix v11.0: Auto-save Mobile Barcode (Memory Feature)
+// Final Fix v20.0: REAL PDF Report (Vector Text + Chinese Font Support)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
@@ -11,8 +11,11 @@ import StatisticsChart from './StatisticsChart';
 
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
+import 'jspdf-autotable'; // ✨ 引入表格套件
 import Barcode from 'react-barcode';
+import { Clipboard } from '@capacitor/clipboard';
+import { Filesystem, Directory } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 
 const EXPENSE_CATS = ["飲食", "交通", "水電", "教育", "投資", "房租", "美裝與服飾", "通訊", "休閒", "其他"]; 
 const INCOME_CATS = ["薪水", "兼職", "投資", "零用錢", "其他"];
@@ -53,8 +56,6 @@ function App() {
   useEffect(() => {
     fetchRecords();
     fetchRates();
-    
-    // ✨✨✨ 這裡新增：App 一打開，就去檢查有沒有「存檔過的載具」 ✨✨✨
     const savedBarcode = localStorage.getItem('my_mobile_barcode');
     if (savedBarcode) {
       setMobileBarcode(savedBarcode);
@@ -63,75 +64,160 @@ function App() {
 
   const handlePaste = async () => {
     try {
-      const text = await navigator.clipboard.readText();
-      setMobileBarcode(text);
-      // ✨ 貼上的時候，也順便存起來
-      localStorage.setItem('my_mobile_barcode', text);
-      toast({ title: "已貼上並記憶", status: "success", duration: 1000 });
-    } catch (err) { toast({ title: "貼上失敗", status: "error" }); }
+      let text = '';
+      try {
+        const result = await Clipboard.read();
+        text = result.value;
+      } catch (nativeErr) {
+        text = await navigator.clipboard.readText();
+      }
+
+      if (text) {
+        setMobileBarcode(text);
+        localStorage.setItem('my_mobile_barcode', text);
+        toast({ title: "已貼上並記憶", status: "success", duration: 1000 });
+      } else {
+        toast({ title: "剪貼簿是空的", status: "warning", duration: 1000 });
+      }
+    } catch (err) { 
+      console.error(err);
+      toast({ title: "貼上失敗", description: "請確認剪貼簿權限", status: "error" }); 
+    }
   };
 
-  // 當使用者手動打字修改載具時，也同步存檔
   const handleBarcodeChange = (e) => {
       const val = e.target.value;
       setMobileBarcode(val);
       localStorage.setItem('my_mobile_barcode', val);
   }
 
-  const exportToExcel = () => {
-    const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
-      日期: new Date(r.date).toLocaleDateString(),
-      項目: r.item,
-      類型: r.type === 'income' ? '收入' : '支出',
-      分類: r.category,
-      金額: r.cost,
-      載具: r.mobileBarcode || ""
-    })));
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "記帳紀錄");
-    XLSX.writeFile(workbook, "我的記帳本.xlsx");
-    toast({ title: "Excel 下載成功", status: "success" });
+  const exportToExcel = async () => {
+    try {
+      toast({ title: "正在製作 Excel...", status: "info", duration: 1000 });
+      const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
+        日期: new Date(r.date).toLocaleDateString(),
+        項目: r.item,
+        類型: r.type === 'income' ? '收入' : '支出',
+        分類: r.category,
+        金額: r.cost,
+        載具: r.mobileBarcode || ""
+      })));
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "記帳紀錄");
+      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
+      const fileName = `Accounting_${new Date().getTime()}.xlsx`;
+      const savedFile = await Filesystem.writeFile({
+        path: fileName,
+        data: excelBuffer,
+        directory: Directory.Cache 
+      });
+      await Share.share({
+        title: '分享 Excel 報表',
+        url: savedFile.uri,
+        dialogTitle: '儲存或分享 Excel'
+      });
+      toast({ title: "Excel 準備完成", status: "success" });
+    } catch (err) {
+      console.error("Excel Error:", err);
+      try {
+        const worksheet = XLSX.utils.json_to_sheet(records);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+        XLSX.writeFile(workbook, "我的記帳本.xlsx");
+      } catch (webErr) {
+        toast({ title: "匯出失敗", description: "手機無法儲存", status: "error" });
+      }
+    }
   };
 
-  const exportToPDF = () => {
-    const input = document.getElementById('pdf-report-view');
-    if (!input) {
-      toast({ title: "找不到報表區域", status: "error" });
-      return;
-    }
-    toast({ title: "正在製作 PDF...", status: "info", duration: 1000 });
+  // ✨✨✨ 真正的 PDF 產生器 (讀取 MyFont.ttf) ✨✨✨
+  const exportToPDF = async () => {
+    toast({ title: "正在製作 PDF...", description: "正在載入字型與生成報表", status: "info", duration: 2000 });
 
-    html2canvas(input, { 
-      scale: 2, 
-      useCORS: true 
-    }).then((canvas) => {
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      
-      const imgWidth = 210; 
-      const pageHeight = 297; 
-      const imgHeight = (canvas.height * imgWidth) / canvas.width; 
-      
-      let heightLeft = imgHeight;
-      let position = 0;
+    try {
+      const doc = new jsPDF();
 
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
+      // 🔥 這裡會去抓 public/MyFont.ttf
+      try {
+        const response = await fetch('MyFont.ttf');
+        if (!response.ok) throw new Error("找不到字型檔");
+        const blob = await response.blob();
+        const reader = new FileReader();
+        
+        reader.readAsDataURL(blob);
+        reader.onloadend = async function() {
+          const base64data = reader.result.split(',')[1];
+          
+          // 註冊字型
+          doc.addFileToVFS('MyFont.ttf', base64data);
+          doc.addFont('MyFont.ttf', 'MyFont', 'normal');
+          doc.setFont('MyFont'); // 設定使用這個字型
 
-      while (heightLeft >= 0) {
-        position = position - pageHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+          // 標題
+          doc.setFontSize(18);
+          doc.text("我的記帳本 - 收支明細", 105, 15, { align: "center" });
+          
+          doc.setFontSize(10);
+          doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 105, 22, { align: "center" });
+          doc.text(`總資產: $${totalBalance}`, 195, 22, { align: "right" });
+
+          // 表格資料
+          const tableColumn = ["日期", "項目", "分類", "類型", "金額", "載具號碼"];
+          const tableRows = [];
+
+          records.forEach(r => {
+            const rowData = [
+              new Date(r.date).toLocaleDateString(),
+              r.item,
+              r.category,
+              r.type === 'income' ? '收入' : '支出',
+              `$${r.cost}`,
+              r.mobileBarcode || ""
+            ];
+            tableRows.push(rowData);
+          });
+
+          // 畫表格
+          doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 25,
+            styles: { 
+              font: 'MyFont', // 指定表格內也用這個中文字型
+              fontStyle: 'normal'
+            },
+            headStyles: { fillColor: [66, 133, 244] }, 
+          });
+
+          // 存檔與分享
+          const pdfOutput = doc.output('datauristring');
+          const base64Data = pdfOutput.split(',')[1];
+          const fileName = `MyReport_${new Date().getTime()}.pdf`;
+
+          const savedFile = await Filesystem.writeFile({
+            path: fileName,
+            data: base64Data,
+            directory: Directory.Cache,
+          });
+
+          await Share.share({
+            title: '分享記帳報表',
+            text: '這是您的正式 PDF 報表',
+            url: savedFile.uri,
+            dialogTitle: '下載或分享 PDF',
+          });
+
+          toast({ title: "PDF 製作成功", status: "success" });
+        }
+      } catch (fontErr) {
+        console.error("Font Error:", fontErr);
+        toast({ title: "字型載入失敗", description: "請確認 public/MyFont.ttf 是否存在", status: "error" });
       }
-      
-      pdf.save("我的記帳本_完整報表.pdf");
-      
-      toast({ title: "PDF 下載成功", status: "success" });
-    }).catch(err => {
-        console.error(err);
-        toast({ title: "PDF 製作失敗", status: "error" });
-    });
+
+    } catch (err) {
+      console.error("PDF Generation Error:", err);
+      toast({ title: "PDF 失敗", description: err.message, status: "error" });
+    }
   };
 
   const handleSubmit = async () => {
@@ -146,18 +232,12 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newRecord),
       });
-      
-      // ✨✨✨ 這裡修改：新增成功後，只清空項目、金額、分類，**保留載具**！ ✨✨✨
-      setItem(''); 
-      setCost(''); 
-      setCategory(''); 
-      // setMobileBarcode('');  <-- 這一行被我刪掉了，這樣載具就不會消失！
-      
+      setItem(''); setCost(''); setCategory(''); 
       setDate(new Date().toISOString().split('T')[0]);
       fetchRecords();
       toast({ title: "記帳成功", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "新增失敗", description: "請確認網路連線", status: "error" });
+      toast({ title: "新增失敗", status: "error" });
     }
   };
 
@@ -175,48 +255,10 @@ function App() {
   }, 0);
 
   return (
-    <Box bg="gray.50" minH="100vh" py={8}>
-      
-      {/* PDF 報表專用區 (隱藏) */}
-      <Box position="fixed" left="-9999px" top="0" id="pdf-report-view" bg="white" p={10} width="210mm" minH="297mm">
-        <Heading size="lg" mb={2} textAlign="center" color="black">我的記帳本 - 收支明細</Heading>
-        <Text textAlign="center" mb={6} color="gray.600">匯出日期: {new Date().toLocaleDateString()}</Text>
-        
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-                <tr style={{ borderBottom: '2px solid #333', backgroundColor: '#f0f0f0' }}>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>日期</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>項目</th>
-                    <th style={{ padding: '8px', textAlign: 'left' }}>分類</th>
-                    <th style={{ padding: '8px', textAlign: 'center' }}>類型</th>
-                    <th style={{ padding: '8px', textAlign: 'right' }}>金額</th>
-                    <th style={{ padding: '8px', textAlign: 'right' }}>載具號碼</th>
-                </tr>
-            </thead>
-            <tbody>
-                {records.map((r, index) => (
-                    <tr key={index} style={{ borderBottom: '1px solid #ddd' }}>
-                        <td style={{ padding: '8px' }}>{new Date(r.date).toLocaleDateString()}</td>
-                        <td style={{ padding: '8px', fontWeight: 'bold' }}>{r.item}</td>
-                        <td style={{ padding: '8px' }}>{r.category}</td>
-                        <td style={{ padding: '8px', textAlign: 'center', color: r.type === 'income' ? 'green' : 'red' }}>
-                            {r.type === 'income' ? '收入' : '支出'}
-                        </td>
-                        <td style={{ padding: '8px', textAlign: 'right', fontWeight: 'bold' }}>${r.cost}</td>
-                        <td style={{ padding: '8px', textAlign: 'right', fontFamily: 'monospace' }}>{r.mobileBarcode}</td>
-                    </tr>
-                ))}
-            </tbody>
-        </table>
-        <Box mt={8} textAlign="right">
-             <Text fontSize="xl" fontWeight="bold">總資產: ${totalBalance}</Text>
-        </Box>
-      </Box>
-
-      <Container maxW="md">
+    <Box bg="gray.50" minH="100vh" py={8} overflowX="hidden" w="100vw">
+      <Container maxW="md"> 
         <VStack spacing={4} mb={6}>
-          {/* v11.0 標題 - 貼心記憶版 */}
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v11.0)</Heading>
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v20.0)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -248,7 +290,6 @@ function App() {
 
         <StatisticsChart data={records} currentType={type} />
 
-        {/* 輸入區域 */}
         <Card w="100%" mb={6} boxShadow="md" borderRadius="lg">
             <CardBody>
                 <VStack spacing={4}>
@@ -264,14 +305,13 @@ function App() {
                         <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} variant="filled" />
                     </FormControl>
                     
-                    {/* 輸入預覽區 */}
                     <FormControl>
                         <FormLabel fontSize="sm" color="gray.500">載具號碼 (自動記憶)</FormLabel>
                         <InputGroup>
                             <Input 
                                 placeholder="/ABC.123" 
                                 value={mobileBarcode} 
-                                onChange={handleBarcodeChange} // 改用新的處理函數
+                                onChange={handleBarcodeChange} 
                                 variant="filled" 
                             />
                             <InputRightElement width="4.5rem"><Button h="1.75rem" size="sm" onClick={handlePaste}>貼上</Button></InputRightElement>
@@ -305,24 +345,19 @@ function App() {
             </CardBody>
         </Card>
 
-        {/* 紀錄列表 */}
-        <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2}>
+        <VStack id="record-list" w="100%" spacing={3} align="stretch" bg="gray.50" p={2} pb={40}>
             {records.slice(0, 50).map((record) => (
                 <Card key={record._id} bg="white" shadow="sm" borderRadius="lg" overflow="hidden" borderLeft="4px solid" borderColor={(record.type === 'income') ? "green.400" : "red.400"}>
                     <CardBody py={3} px={4}>
                         <Flex justify="space-between" align="center">
-                            
                             <VStack align="start" spacing={1} maxW="65%">
                                 <Text fontWeight="bold" fontSize="md" noOfLines={1}>{record.item}</Text>
-                                
                                 <HStack spacing={2} wrap="wrap">
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
                                   <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
                                 </HStack>
-
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
-
                             <HStack>
                                 <Text fontWeight="bold" fontSize="lg" color={(record.type === 'income') ? "green.500" : "red.500"} whiteSpace="nowrap">
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
