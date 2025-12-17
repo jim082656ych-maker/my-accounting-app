@@ -1,21 +1,16 @@
-// Final Fix v20.0: REAL PDF Report (Vector Text + Chinese Font Support)
+// Final Fix v20.1: Clean Version (Removed Export Buttons)
 import React, { useState, useEffect } from 'react';
 import { 
   Box, Button, Container, Heading, Input, VStack, HStack, Text, useToast, 
   Card, CardBody, Stat, StatLabel, StatNumber, Badge, IconButton,
-  Select, Radio, RadioGroup, Stack, Divider, ButtonGroup, SimpleGrid,
+  Select, Radio, RadioGroup, Stack, Divider, SimpleGrid,
   FormControl, FormLabel, InputGroup, InputRightElement, Flex, Collapse
 } from '@chakra-ui/react';
-import { DeleteIcon, AddIcon, DownloadIcon } from '@chakra-ui/icons';
+import { DeleteIcon, AddIcon } from '@chakra-ui/icons';
 import StatisticsChart from './StatisticsChart';
 
-import * as XLSX from 'xlsx';
-import jsPDF from 'jspdf';
-import 'jspdf-autotable'; // ✨ 引入表格套件
 import Barcode from 'react-barcode';
 import { Clipboard } from '@capacitor/clipboard';
-import { Filesystem, Directory } from '@capacitor/filesystem';
-import { Share } from '@capacitor/share';
 
 const EXPENSE_CATS = ["飲食", "交通", "水電", "教育", "投資", "房租", "美裝與服飾", "通訊", "休閒", "其他"]; 
 const INCOME_CATS = ["薪水", "兼職", "投資", "零用錢", "其他"];
@@ -91,135 +86,6 @@ function App() {
       localStorage.setItem('my_mobile_barcode', val);
   }
 
-  const exportToExcel = async () => {
-    try {
-      toast({ title: "正在製作 Excel...", status: "info", duration: 1000 });
-      const worksheet = XLSX.utils.json_to_sheet(records.map(r => ({
-        日期: new Date(r.date).toLocaleDateString(),
-        項目: r.item,
-        類型: r.type === 'income' ? '收入' : '支出',
-        分類: r.category,
-        金額: r.cost,
-        載具: r.mobileBarcode || ""
-      })));
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "記帳紀錄");
-      const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'base64' });
-      const fileName = `Accounting_${new Date().getTime()}.xlsx`;
-      const savedFile = await Filesystem.writeFile({
-        path: fileName,
-        data: excelBuffer,
-        directory: Directory.Cache 
-      });
-      await Share.share({
-        title: '分享 Excel 報表',
-        url: savedFile.uri,
-        dialogTitle: '儲存或分享 Excel'
-      });
-      toast({ title: "Excel 準備完成", status: "success" });
-    } catch (err) {
-      console.error("Excel Error:", err);
-      try {
-        const worksheet = XLSX.utils.json_to_sheet(records);
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-        XLSX.writeFile(workbook, "我的記帳本.xlsx");
-      } catch (webErr) {
-        toast({ title: "匯出失敗", description: "手機無法儲存", status: "error" });
-      }
-    }
-  };
-
-  // ✨✨✨ 真正的 PDF 產生器 (讀取 MyFont.ttf) ✨✨✨
-  const exportToPDF = async () => {
-    toast({ title: "正在製作 PDF...", description: "正在載入字型與生成報表", status: "info", duration: 2000 });
-
-    try {
-      const doc = new jsPDF();
-
-      // 🔥 這裡會去抓 public/MyFont.ttf
-      try {
-        const response = await fetch('MyFont.ttf');
-        if (!response.ok) throw new Error("找不到字型檔");
-        const blob = await response.blob();
-        const reader = new FileReader();
-        
-        reader.readAsDataURL(blob);
-        reader.onloadend = async function() {
-          const base64data = reader.result.split(',')[1];
-          
-          // 註冊字型
-          doc.addFileToVFS('MyFont.ttf', base64data);
-          doc.addFont('MyFont.ttf', 'MyFont', 'normal');
-          doc.setFont('MyFont'); // 設定使用這個字型
-
-          // 標題
-          doc.setFontSize(18);
-          doc.text("我的記帳本 - 收支明細", 105, 15, { align: "center" });
-          
-          doc.setFontSize(10);
-          doc.text(`匯出日期: ${new Date().toLocaleDateString()}`, 105, 22, { align: "center" });
-          doc.text(`總資產: $${totalBalance}`, 195, 22, { align: "right" });
-
-          // 表格資料
-          const tableColumn = ["日期", "項目", "分類", "類型", "金額", "載具號碼"];
-          const tableRows = [];
-
-          records.forEach(r => {
-            const rowData = [
-              new Date(r.date).toLocaleDateString(),
-              r.item,
-              r.category,
-              r.type === 'income' ? '收入' : '支出',
-              `$${r.cost}`,
-              r.mobileBarcode || ""
-            ];
-            tableRows.push(rowData);
-          });
-
-          // 畫表格
-          doc.autoTable({
-            head: [tableColumn],
-            body: tableRows,
-            startY: 25,
-            styles: { 
-              font: 'MyFont', // 指定表格內也用這個中文字型
-              fontStyle: 'normal'
-            },
-            headStyles: { fillColor: [66, 133, 244] }, 
-          });
-
-          // 存檔與分享
-          const pdfOutput = doc.output('datauristring');
-          const base64Data = pdfOutput.split(',')[1];
-          const fileName = `MyReport_${new Date().getTime()}.pdf`;
-
-          const savedFile = await Filesystem.writeFile({
-            path: fileName,
-            data: base64Data,
-            directory: Directory.Cache,
-          });
-
-          await Share.share({
-            title: '分享記帳報表',
-            text: '這是您的正式 PDF 報表',
-            url: savedFile.uri,
-            dialogTitle: '下載或分享 PDF',
-          });
-
-          toast({ title: "PDF 製作成功", status: "success" });
-        }
-      } catch (fontErr) {
-        console.error("Font Error:", fontErr);
-        toast({ title: "字型載入失敗", description: "請確認 public/MyFont.ttf 是否存在", status: "error" });
-      }
-
-    } catch (err) {
-      console.error("PDF Generation Error:", err);
-      toast({ title: "PDF 失敗", description: err.message, status: "error" });
-    }
-  };
-
   const handleSubmit = async () => {
     if(!item || !cost || !category || !date) {
         toast({ title: "請填寫完整", status: "warning" });
@@ -258,7 +124,7 @@ function App() {
     <Box bg="gray.50" minH="100vh" py={8} overflowX="hidden" w="100vw">
       <Container maxW="md"> 
         <VStack spacing={4} mb={6}>
-          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v20.0)</Heading>
+          <Heading as="h1" size="lg" color="teal.600">我的記帳本 📒 (v20.1)</Heading>
           
           <Card w="100%" bg="white" boxShadow="xl" borderRadius="xl">
               <CardBody textAlign="center">
@@ -268,10 +134,7 @@ function App() {
                         $ {totalBalance}
                       </StatNumber>
                   </Stat>
-                  <ButtonGroup mt={4} size="sm" isAttached variant="outline">
-                    <Button onClick={exportToExcel} leftIcon={<DownloadIcon />}>Excel</Button>
-                    <Button onClick={exportToPDF} leftIcon={<DownloadIcon />}>PDF</Button>
-                  </ButtonGroup>
+                  {/* 按鈕已移除 */}
               </CardBody>
           </Card>
         </VStack>
@@ -353,8 +216,8 @@ function App() {
                             <VStack align="start" spacing={1} maxW="65%">
                                 <Text fontWeight="bold" fontSize="md" noOfLines={1}>{record.item}</Text>
                                 <HStack spacing={2} wrap="wrap">
-                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
-                                  <Badge className="pdf-hide" data-html2canvas-ignore="true" colorScheme="purple" variant="outline">{record.category}</Badge>
+                                  <Badge colorScheme={(record.type === 'income') ? "green" : "red"}>{(record.type === 'income') ? "收" : "支"}</Badge>
+                                  <Badge colorScheme="purple" variant="outline">{record.category}</Badge>
                                 </HStack>
                                 <Text fontSize="xs" color="gray.400">{new Date(record.date).toLocaleDateString()}</Text>
                             </VStack>
@@ -362,7 +225,7 @@ function App() {
                                 <Text fontWeight="bold" fontSize="lg" color={(record.type === 'income') ? "green.500" : "red.500"} whiteSpace="nowrap">
                                     {(record.type === 'income') ? "+ " : "- "} ${record.cost}
                                 </Text>
-                                <IconButton className="pdf-hide" data-html2canvas-ignore="true" icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
+                                <IconButton icon={<DeleteIcon />} size="sm" colorScheme="gray" variant="ghost" onClick={() => handleDelete(record._id)}/>
                             </HStack>
                         </Flex>
                     </CardBody>
